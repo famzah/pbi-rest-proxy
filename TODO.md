@@ -168,6 +168,7 @@ Implemented:
 - Phase 4 Power BI workspace and semantic model discovery
 - Phase 5 connected target selection with computed XMLA endpoint
 - Phase 7 DAX execution against the connected semantic model
+- Phase 8 localhost-only REST API with `/health`, `/info`, and `/execute-dax`
 
 Skipped:
 
@@ -210,6 +211,7 @@ Contents:
   - connected semantic model
   - XMLA server
   - local REST endpoint
+  - REST server state
 - `Load workspaces/models`
 - `Connect`
 - `Disconnect`
@@ -255,6 +257,9 @@ Keep:
 Change:
 - `/info` should return the currently selected cloud model instead of startup CLI values
 - request logging should flow to the in-app log sink as well as normal logging infrastructure
+
+Current status:
+- Implemented in-process and bound to `127.0.0.1`
 
 #### Semantic model discovery
 
@@ -356,10 +361,13 @@ Notes:
 
 ### Phase 8: Reintroduce the local REST layer
 
-- implement:
-  - `GET /health`
-  - `GET /info`
-  - `POST /execute-dax`
+Status:
+- Implemented
+
+Notes:
+- auto-start the server when the desktop app starts
+- bind to `127.0.0.1` only
+- reuse the current connected semantic model from the app session
 
 ### Phase 9: Add the log tab
 

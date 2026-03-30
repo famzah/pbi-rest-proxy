@@ -7,6 +7,7 @@ namespace PbiRestProxy.Session;
 public sealed class AppSessionService
 {
     private readonly LogStore logStore;
+    private readonly object syncRoot = new();
     private string? accessToken;
 
     public AppSessionService(LogStore logStore)
@@ -16,26 +17,59 @@ public sealed class AppSessionService
 
     public event Action? StateChanged;
 
-    public AppSessionState State { get; private set; } = AppSessionState.Empty;
+    public AppSessionState State
+    {
+        get
+        {
+            lock (syncRoot)
+            {
+                return state;
+            }
+        }
+        private set
+        {
+            lock (syncRoot)
+            {
+                state = value;
+            }
+        }
+    }
 
-    public string? CurrentAccessToken => accessToken;
+    private AppSessionState state = AppSessionState.Empty;
+
+    public string? CurrentAccessToken
+    {
+        get
+        {
+            lock (syncRoot)
+            {
+                return accessToken;
+            }
+        }
+    }
 
     public void SetAccessToken(string tokenInput, AccessTokenSource source)
     {
         var normalizedToken = AccessTokenParser.Normalize(tokenInput);
         var parsedToken = AccessTokenParser.Parse(normalizedToken);
 
-        accessToken = normalizedToken;
-        State = State with
+        AppSessionState updatedState;
+
+        lock (syncRoot)
         {
-            TokenSource = source,
-            AccessToken = parsedToken,
-            SelectedWorkspace = null,
-            SelectedSemanticModel = null,
-            ConnectedWorkspace = null,
-            ConnectedSemanticModel = null,
-            XmlaEndpoint = null
-        };
+            accessToken = normalizedToken;
+            updatedState = state with
+            {
+                TokenSource = source,
+                AccessToken = parsedToken,
+                SelectedWorkspace = null,
+                SelectedSemanticModel = null,
+                ConnectedWorkspace = null,
+                ConnectedSemanticModel = null,
+                XmlaEndpoint = null
+            };
+            state = updatedState;
+        }
 
         logStore.WriteInfo(
             "Auth",
@@ -51,22 +85,25 @@ public sealed class AppSessionService
 
     public void ClearAccessToken()
     {
-        if (accessToken is null && State.AccessToken is null)
+        lock (syncRoot)
         {
-            return;
-        }
+            if (accessToken is null && state.AccessToken is null)
+            {
+                return;
+            }
 
-        accessToken = null;
-        State = State with
-        {
-            TokenSource = null,
-            AccessToken = null,
-            SelectedWorkspace = null,
-            SelectedSemanticModel = null,
-            ConnectedWorkspace = null,
-            ConnectedSemanticModel = null,
-            XmlaEndpoint = null
-        };
+            accessToken = null;
+            state = state with
+            {
+                TokenSource = null,
+                AccessToken = null,
+                SelectedWorkspace = null,
+                SelectedSemanticModel = null,
+                ConnectedWorkspace = null,
+                ConnectedSemanticModel = null,
+                XmlaEndpoint = null
+            };
+        }
 
         logStore.WriteInfo("Auth", "Access token cleared from the current session.");
         StateChanged?.Invoke();
@@ -74,19 +111,22 @@ public sealed class AppSessionService
 
     public void SetSelectedWorkspace(WorkspaceSummary? workspace)
     {
-        if (State.SelectedWorkspace?.Id == workspace?.Id)
+        lock (syncRoot)
         {
-            return;
-        }
+            if (state.SelectedWorkspace?.Id == workspace?.Id)
+            {
+                return;
+            }
 
-        State = State with
-        {
-            SelectedWorkspace = workspace,
-            SelectedSemanticModel = null,
-            ConnectedWorkspace = null,
-            ConnectedSemanticModel = null,
-            XmlaEndpoint = null
-        };
+            state = state with
+            {
+                SelectedWorkspace = workspace,
+                SelectedSemanticModel = null,
+                ConnectedWorkspace = null,
+                ConnectedSemanticModel = null,
+                XmlaEndpoint = null
+            };
+        }
 
         if (workspace is null)
         {
@@ -102,23 +142,26 @@ public sealed class AppSessionService
 
     public void SetSelectedSemanticModel(SemanticModelSummary? semanticModel)
     {
-        if (semanticModel is not null && State.SelectedWorkspace is null)
+        lock (syncRoot)
         {
-            throw new InvalidOperationException("A workspace must be selected before choosing a semantic model.");
-        }
+            if (semanticModel is not null && state.SelectedWorkspace is null)
+            {
+                throw new InvalidOperationException("A workspace must be selected before choosing a semantic model.");
+            }
 
-        if (State.SelectedSemanticModel?.Id == semanticModel?.Id)
-        {
-            return;
-        }
+            if (state.SelectedSemanticModel?.Id == semanticModel?.Id)
+            {
+                return;
+            }
 
-        State = State with
-        {
-            SelectedSemanticModel = semanticModel,
-            ConnectedWorkspace = null,
-            ConnectedSemanticModel = null,
-            XmlaEndpoint = null
-        };
+            state = state with
+            {
+                SelectedSemanticModel = semanticModel,
+                ConnectedWorkspace = null,
+                ConnectedSemanticModel = null,
+                XmlaEndpoint = null
+            };
+        }
 
         if (semanticModel is null)
         {
@@ -134,47 +177,57 @@ public sealed class AppSessionService
 
     public void ConnectSelection()
     {
-        if (State.SelectedWorkspace is null || State.SelectedSemanticModel is null)
+        WorkspaceSummary selectedWorkspace;
+        SemanticModelSummary selectedSemanticModel;
+        string xmlaEndpoint;
+
+        lock (syncRoot)
         {
-            throw new InvalidOperationException("Select a workspace and semantic model before connecting.");
+            if (state.SelectedWorkspace is null || state.SelectedSemanticModel is null)
+            {
+                throw new InvalidOperationException("Select a workspace and semantic model before connecting.");
+            }
+
+            selectedWorkspace = state.SelectedWorkspace;
+            selectedSemanticModel = state.SelectedSemanticModel;
+            xmlaEndpoint = PowerBiXmlaEndpointFactory.BuildWorkspaceEndpoint(selectedWorkspace);
+
+            state = state with
+            {
+                ConnectedWorkspace = selectedWorkspace,
+                ConnectedSemanticModel = selectedSemanticModel,
+                XmlaEndpoint = xmlaEndpoint
+            };
         }
-
-        var selectedWorkspace = State.SelectedWorkspace;
-        var selectedSemanticModel = State.SelectedSemanticModel;
-        var xmlaEndpoint = PowerBiXmlaEndpointFactory.BuildWorkspaceEndpoint(selectedWorkspace);
-
-        State = State with
-        {
-            ConnectedWorkspace = selectedWorkspace,
-            ConnectedSemanticModel = selectedSemanticModel,
-            XmlaEndpoint = xmlaEndpoint
-        };
 
         logStore.WriteInfo(
             "Connection",
-            $"Connected target set to workspace '{State.ConnectedWorkspaceName}', semantic model '{State.ConnectedSemanticModelName}', XMLA endpoint '{xmlaEndpoint}'.");
+            $"Connected target set to workspace '{selectedWorkspace.Name}', semantic model '{selectedSemanticModel.Name}', XMLA endpoint '{xmlaEndpoint}'.");
         StateChanged?.Invoke();
     }
 
     public void ClearSelection()
     {
-        if (State.SelectedWorkspace is null &&
-            State.SelectedSemanticModel is null &&
-            State.ConnectedWorkspace is null &&
-            State.ConnectedSemanticModel is null &&
-            State.XmlaEndpoint is null)
+        lock (syncRoot)
         {
-            return;
-        }
+            if (state.SelectedWorkspace is null &&
+                state.SelectedSemanticModel is null &&
+                state.ConnectedWorkspace is null &&
+                state.ConnectedSemanticModel is null &&
+                state.XmlaEndpoint is null)
+            {
+                return;
+            }
 
-        State = State with
-        {
-            SelectedWorkspace = null,
-            SelectedSemanticModel = null,
-            ConnectedWorkspace = null,
-            ConnectedSemanticModel = null,
-            XmlaEndpoint = null
-        };
+            state = state with
+            {
+                SelectedWorkspace = null,
+                SelectedSemanticModel = null,
+                ConnectedWorkspace = null,
+                ConnectedSemanticModel = null,
+                XmlaEndpoint = null
+            };
+        }
 
         logStore.WriteInfo("Discovery", "Workspace selection, semantic model selection, and connected target cleared.");
         StateChanged?.Invoke();
@@ -182,20 +235,59 @@ public sealed class AppSessionService
 
     public void Disconnect()
     {
-        if (State.ConnectedWorkspace is null && State.ConnectedSemanticModel is null && State.XmlaEndpoint is null)
+        lock (syncRoot)
         {
-            return;
-        }
+            if (state.ConnectedWorkspace is null && state.ConnectedSemanticModel is null && state.XmlaEndpoint is null)
+            {
+                return;
+            }
 
-        State = State with
-        {
-            ConnectedWorkspace = null,
-            ConnectedSemanticModel = null,
-            XmlaEndpoint = null
-        };
+            state = state with
+            {
+                ConnectedWorkspace = null,
+                ConnectedSemanticModel = null,
+                XmlaEndpoint = null
+            };
+        }
 
         logStore.WriteInfo("Connection", "Disconnected the current XMLA target.");
         StateChanged?.Invoke();
+    }
+
+    public bool TryGetConnectedQueryContext(out ConnectedQueryContext? context, out string? failureMessage)
+    {
+        lock (syncRoot)
+        {
+            if (accessToken is null || state.AccessToken is null)
+            {
+                context = null;
+                failureMessage = "Load an access token before executing DAX.";
+                return false;
+            }
+
+            if (state.AccessToken.IsExpired)
+            {
+                context = null;
+                failureMessage = "The current access token is expired. Refresh it before executing DAX.";
+                return false;
+            }
+
+            if (state.XmlaEndpoint is null || state.ConnectedSemanticModelName is null)
+            {
+                context = null;
+                failureMessage = "Connect to a semantic model before executing DAX.";
+                return false;
+            }
+
+            context = new ConnectedQueryContext(
+                accessToken,
+                state.AccessToken,
+                state.XmlaEndpoint,
+                state.ConnectedSemanticModelName,
+                state.ConnectedWorkspaceName);
+            failureMessage = null;
+            return true;
+        }
     }
 
     private static string FormatTokenSource(AccessTokenSource source)

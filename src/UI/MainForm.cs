@@ -4,6 +4,7 @@ using PbiRestProxy.Auth;
 using PbiRestProxy.Dax;
 using PbiRestProxy.Discovery;
 using PbiRestProxy.Logging;
+using PbiRestProxy.Rest;
 using PbiRestProxy.Session;
 
 namespace PbiRestProxy.UI;
@@ -15,6 +16,7 @@ public sealed class MainForm : Form
     private readonly AzureCliAccessTokenProvider azureCliAccessTokenProvider;
     private readonly PowerBiDiscoveryService discoveryService;
     private readonly AdomdDaxQueryService daxQueryService;
+    private readonly LocalRestApiHost localRestApiHost;
 
     private Label tokenSourceValueLabel = null!;
     private Label tokenStateValueLabel = null!;
@@ -28,6 +30,8 @@ public sealed class MainForm : Form
     private Label connectedSemanticModelValueLabel = null!;
     private Label connectionStateValueLabel = null!;
     private Label xmlaEndpointValueLabel = null!;
+    private Label restServerStateValueLabel = null!;
+    private Label restEndpointValueLabel = null!;
     private Label daxTargetValueLabel = null!;
     private Label daxAvailabilityValueLabel = null!;
     private Label daxSummaryValueLabel = null!;
@@ -53,12 +57,18 @@ public sealed class MainForm : Form
     private bool isLoadingSemanticModels;
     private bool isExecutingDaxQuery;
 
-    public MainForm(AppSessionService sessionService, LogStore logStore, PowerBiDiscoveryService discoveryService, AdomdDaxQueryService daxQueryService)
+    public MainForm(
+        AppSessionService sessionService,
+        LogStore logStore,
+        PowerBiDiscoveryService discoveryService,
+        AdomdDaxQueryService daxQueryService,
+        LocalRestApiHost localRestApiHost)
     {
         this.sessionService = sessionService;
         this.logStore = logStore;
         this.discoveryService = discoveryService;
         this.daxQueryService = daxQueryService;
+        this.localRestApiHost = localRestApiHost;
         azureCliAccessTokenProvider = new AzureCliAccessTokenProvider(logStore);
 
         InitializeComponent();
@@ -72,6 +82,7 @@ public sealed class MainForm : Form
         if (disposing)
         {
             sessionService.StateChanged -= HandleSessionStateChanged;
+            localRestApiHost.StateChanged -= HandleRestApiStateChanged;
             logStore.EntryAdded -= HandleLogEntryAdded;
             logStore.Cleared -= HandleLogCleared;
         }
@@ -106,7 +117,7 @@ public sealed class MainForm : Form
         };
 
         statusStrip.Items.Add(sessionStatusLabel);
-        statusStrip.Items.Add(new ToolStripStatusLabel("Current milestone: token loading + discovery + connect + DAX execution"));
+        statusStrip.Items.Add(new ToolStripStatusLabel("Current milestone: token loading + discovery + connect + REST + DAX execution"));
 
         Controls.Add(tabControl);
         Controls.Add(statusStrip);
@@ -396,6 +407,8 @@ public sealed class MainForm : Form
         AddStatusRow(table, "Connected workspace:", out connectedWorkspaceValueLabel);
         AddStatusRow(table, "Connected semantic model:", out connectedSemanticModelValueLabel);
         AddStatusRow(table, "XMLA endpoint:", out xmlaEndpointValueLabel);
+        AddStatusRow(table, "REST server:", out restServerStateValueLabel);
+        AddStatusRow(table, "REST endpoint:", out restEndpointValueLabel);
 
         connectButton = new Button
         {
@@ -640,6 +653,7 @@ public sealed class MainForm : Form
     private void WireEvents()
     {
         sessionService.StateChanged += HandleSessionStateChanged;
+        localRestApiHost.StateChanged += HandleRestApiStateChanged;
         logStore.EntryAdded += HandleLogEntryAdded;
         logStore.Cleared += HandleLogCleared;
         tokenInputTextBox.TextChanged += (_, _) => UpdateActionButtons();
@@ -743,6 +757,12 @@ public sealed class MainForm : Form
         connectedWorkspaceValueLabel.Text = state.ConnectedWorkspaceName ?? "Not connected yet";
         connectedSemanticModelValueLabel.Text = state.ConnectedSemanticModelName ?? "Not connected yet";
         xmlaEndpointValueLabel.Text = state.XmlaEndpoint ?? "Not connected yet";
+
+        var restApiState = localRestApiHost.State;
+        restServerStateValueLabel.Text = restApiState.StartupError is null
+            ? restApiState.StatusText
+            : $"{restApiState.StatusText}: {restApiState.StartupError}";
+        restEndpointValueLabel.Text = restApiState.BaseUrl;
 
         var connectedSemanticModelName = state.ConnectedSemanticModelName;
 
@@ -1121,6 +1141,22 @@ public sealed class MainForm : Form
     }
 
     private void HandleSessionStateChanged()
+    {
+        if (IsDisposed)
+        {
+            return;
+        }
+
+        if (InvokeRequired)
+        {
+            BeginInvoke(new Action(RefreshSessionState));
+            return;
+        }
+
+        RefreshSessionState();
+    }
+
+    private void HandleRestApiStateChanged()
     {
         if (IsDisposed)
         {

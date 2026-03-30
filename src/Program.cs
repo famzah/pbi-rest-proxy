@@ -2,6 +2,7 @@ using System.Windows.Forms;
 using PbiRestProxy.Dax;
 using PbiRestProxy.Discovery;
 using PbiRestProxy.Logging;
+using PbiRestProxy.Rest;
 using PbiRestProxy.Session;
 using PbiRestProxy.UI;
 
@@ -19,9 +20,18 @@ internal static class Program
         var sessionService = new AppSessionService(logStore);
         var discoveryService = new PowerBiDiscoveryService(logStore);
         var daxQueryService = new AdomdDaxQueryService(logStore);
+        var localRestApiHost = new LocalRestApiHost(logStore, sessionService, daxQueryService);
 
         logStore.WriteInfo("App", "Started pbi-rest-proxy desktop shell.");
+        localRestApiHost.StartAsync().GetAwaiter().GetResult();
 
-        Application.Run(new MainForm(sessionService, logStore, discoveryService, daxQueryService));
+        try
+        {
+            Application.Run(new MainForm(sessionService, logStore, discoveryService, daxQueryService, localRestApiHost));
+        }
+        finally
+        {
+            localRestApiHost.DisposeAsync().AsTask().GetAwaiter().GetResult();
+        }
     }
 }

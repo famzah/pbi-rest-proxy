@@ -17,11 +17,12 @@ Current implemented milestone:
 - Azure CLI-assisted or manual access-token loading with local JWT claim parsing
 - Power BI workspace and semantic model discovery from the `Data Source` tab
 - selected-model connect/disconnect flow with computed XMLA workspace endpoint
+- localhost-only REST server with `GET /health`, `GET /info`, and `POST /execute-dax`
 - DAX execution against the connected semantic model over XMLA
 
-Not implemented yet:
+Skipped for now:
 
-- local REST API
+- metadata exploration over XMLA, because the current target permission model does not allow internal semantic-model metadata discovery
 
 ## Prerequisites
 
@@ -112,9 +113,17 @@ az login --tenant <tenant-id-or-domain> --allow-no-subscriptions
 6. Open the `Data Source` tab and click `Load Workspaces`.
 7. Select a workspace and click `Load Models`.
 8. Select a semantic model and click `Connect`.
-9. Confirm that `Current Selection` shows the connected target and XMLA endpoint.
+9. Confirm that `Current Selection` shows the connected target, XMLA endpoint, and local REST server URL.
 10. Open the `DAX` tab and run `EVALUATE ROW("Status", "Ready")`.
 11. Confirm that a result grid is shown.
-12. Check the `Log` tab for auth, discovery, connection, and DAX events.
+12. Call the local REST server:
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:51087/health
+Invoke-RestMethod http://127.0.0.1:51087/info
+Invoke-RestMethod http://127.0.0.1:51087/execute-dax -Method Post -ContentType "application/json" -Body '{"query":"EVALUATE ROW(\"Status\", \"REST\")"}'
+```
+
+13. Check the `Log` tab for auth, discovery, connection, REST, and DAX events.
 
 The working plan lives in [TODO.md](TODO.md).
