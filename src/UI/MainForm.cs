@@ -80,6 +80,7 @@ public sealed class MainForm : Form
         };
 
         tabControl.TabPages.Add(BuildConnectionTab());
+        tabControl.TabPages.Add(BuildDataSourceTab());
         tabControl.TabPages.Add(BuildDaxTab());
         tabControl.TabPages.Add(BuildLogTab());
 
@@ -108,18 +109,38 @@ public sealed class MainForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(12),
             ColumnCount = 1,
-            RowCount = 4
+            RowCount = 3
         };
 
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 40f));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 60f));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
 
         root.Controls.Add(BuildStatusGroupBox(), 0, 0);
-        root.Controls.Add(BuildTokenInputGroupBox(), 0, 1);
-        root.Controls.Add(BuildDiscoveryGroupBox(), 0, 2);
-        root.Controls.Add(BuildTargetGroupBox(), 0, 3);
+        root.Controls.Add(BuildAzureCliGroupBox(), 0, 1);
+        root.Controls.Add(BuildTokenInputGroupBox(), 0, 2);
+
+        page.Controls.Add(root);
+        return page;
+    }
+
+    private TabPage BuildDataSourceTab()
+    {
+        var page = new TabPage("Data Source");
+
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12),
+            ColumnCount = 1,
+            RowCount = 2
+        };
+
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+        root.Controls.Add(BuildTargetGroupBox(), 0, 0);
+        root.Controls.Add(BuildDiscoveryGroupBox(), 0, 1);
 
         page.Controls.Add(root);
         return page;
@@ -152,7 +173,7 @@ public sealed class MainForm : Form
     {
         var groupBox = new GroupBox
         {
-            Text = "Access Token",
+            Text = "Manual Access Token",
             Dock = DockStyle.Fill
         };
 
@@ -172,15 +193,8 @@ public sealed class MainForm : Form
         {
             AutoSize = true,
             Dock = DockStyle.Top,
-            Text = "You can fetch a Power BI / Fabric access token through Azure CLI or paste one manually. The token is kept only in memory and is never written to the log."
+            Text = "Paste a Power BI / Fabric access token here if you want to load it manually. The token stays in memory only and is never written to the log."
         };
-
-        azureCliTokenButton = new Button
-        {
-            AutoSize = true,
-            Text = "Login + Get Token via Azure CLI"
-        };
-        azureCliTokenButton.Click += async (_, _) => await AcquireTokenFromAzureCliAsync();
 
         tokenInputTextBox = new TextBox
         {
@@ -215,13 +229,56 @@ public sealed class MainForm : Form
             WrapContents = false
         };
 
-        buttonPanel.Controls.Add(azureCliTokenButton);
         buttonPanel.Controls.Add(applyTokenButton);
         buttonPanel.Controls.Add(clearTokenButton);
 
         layout.Controls.Add(instructionLabel, 0, 0);
         layout.Controls.Add(tokenInputTextBox, 0, 1);
         layout.Controls.Add(buttonPanel, 0, 2);
+
+        groupBox.Controls.Add(layout);
+        return groupBox;
+    }
+
+    private Control BuildAzureCliGroupBox()
+    {
+        var groupBox = new GroupBox
+        {
+            Text = "Azure CLI",
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink
+        };
+
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12),
+            ColumnCount = 1,
+            RowCount = 2,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink
+        };
+
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        var instructionLabel = new Label
+        {
+            AutoSize = true,
+            Dock = DockStyle.Top,
+            Text = "Sign in with Azure CLI and load a fresh Power BI / Fabric access token into the current session."
+        };
+
+        azureCliTokenButton = new Button
+        {
+            AutoSize = true,
+            Text = "Login + Get Token via Azure CLI"
+        };
+        azureCliTokenButton.Click += async (_, _) => await AcquireTokenFromAzureCliAsync();
+
+        layout.Controls.Add(instructionLabel, 0, 0);
+        layout.Controls.Add(azureCliTokenButton, 0, 1);
 
         groupBox.Controls.Add(layout);
         return groupBox;

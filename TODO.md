@@ -161,6 +161,8 @@ Build a standalone Windows app with:
 Implemented:
 
 - Phase 1 desktop WinForms shell with `Connection`, `DAX`, and `Log` tabs
+- `Connection` now focuses on session status and access token management
+- `Data Source` now focuses on current selection and discovery
 - Phase 2 in-memory session and status infrastructure
 - Phase 3 Azure CLI-assisted and manual token loading
 - Phase 4 Power BI workspace and semantic model discovery
@@ -172,7 +174,7 @@ Implemented:
 #### Connection tab
 
 Purpose:
-- manage auth, discovery, and model selection
+- manage auth and session state
 
 Contents:
 - current auth state
@@ -185,15 +187,23 @@ Contents:
   - `Refresh token`
   - `Paste token`
   - `Clear token`
-  - `Load workspaces/models`
-  - `Connect`
-- workspace list
-- semantic model list
+- manual token input
+
+#### Data Source tab
+
+Purpose:
+- manage workspace/model discovery and current selection
+
+Contents:
 - current connection summary:
   - workspace
   - semantic model
   - XMLA server
   - local REST endpoint
+- `Load workspaces/models`
+- `Connect`
+- workspace list
+- semantic model list
 
 #### DAX tab
 
