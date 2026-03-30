@@ -21,7 +21,6 @@ Current implemented milestone:
 
 Not implemented yet:
 
-- metadata exploration over XMLA
 - local REST API
 
 ## Prerequisites

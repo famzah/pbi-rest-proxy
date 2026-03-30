@@ -169,6 +169,11 @@ Implemented:
 - Phase 5 connected target selection with computed XMLA endpoint
 - Phase 7 DAX execution against the connected semantic model
 
+Skipped:
+
+- Phase 6 XMLA metadata exploration for tables, columns, and relationships
+  because the current access model only guarantees DAX/query access, while XMLA metadata discovery requires higher semantic-model permissions that are not available in the target environment
+
 ## MVP scope
 
 ### UI tabs
@@ -292,7 +297,7 @@ Do not do in MVP:
 - create the new solution/project/app under the `pbi-rest-proxy` name from the start
 - introduce a WinForms entry point
 - host the ASP.NET Core local REST server in-process
-- keep the app structure cleanly separated into UI, session, discovery, metadata, query, and REST layers
+- keep the app structure cleanly separated into UI, session, discovery, query, and REST layers
 
 ### Phase 2: Add session and status infrastructure
 
@@ -332,12 +337,16 @@ Implementation notes:
 - when the user clicks `Connect`, set the selected workspace/model in session
 - compute the XMLA endpoint
 - update status UI
-- enable metadata, DAX, and REST execution against the selected model
+- enable DAX and REST execution against the selected model
 
 ### Phase 6: Add metadata exploration
 
-- use XMLA plus TOM/AMO to load tables, columns, relationships, cardinality, and cross-filter direction
-- expose this both in the UI and later through REST
+Status:
+- Skipped
+
+Notes:
+- full XMLA metadata discovery requires higher semantic-model permissions than the target environment provides
+- keep the phase skipped unless the permission model changes or a clearly-supported read-only metadata path is identified
 
 ### Phase 7: Add DAX execution
 
@@ -351,7 +360,6 @@ Implementation notes:
   - `GET /health`
   - `GET /info`
   - `POST /execute-dax`
-- add metadata endpoints after the initial query path works
 
 ### Phase 9: Add the log tab
 
@@ -359,7 +367,6 @@ Implementation notes:
   - local REST access log entries
   - auth events
   - connect/disconnect events
-  - metadata load events
   - DAX execution events
   - errors
 
@@ -376,8 +383,6 @@ Implementation notes:
 - Add a proper build script for the standalone app
 - Add configurable ADOMD command timeout
 - Add better cancellation handling for long-running queries
-- Return richer schema metadata alongside column names
 - Add CSV export endpoint for table-shaped results
 - Add request metrics and optional per-request query logging
 - Consider replacing shell-out Azure CLI auth with Azure.Identity or MSAL later
-- Consider richer semantic model metadata in the picker later

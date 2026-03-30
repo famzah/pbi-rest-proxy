@@ -575,7 +575,7 @@ public sealed class MainForm : Form
         return page;
     }
 
-    private static Control BuildListPane(string title, ListView listView)
+    private static Control BuildListPane(string title, Control content)
     {
         var panel = new TableLayoutPanel
         {
@@ -597,7 +597,7 @@ public sealed class MainForm : Form
         };
 
         panel.Controls.Add(label, 0, 0);
-        panel.Controls.Add(listView, 0, 1);
+        panel.Controls.Add(content, 0, 1);
 
         return panel;
     }
@@ -744,9 +744,11 @@ public sealed class MainForm : Form
         connectedSemanticModelValueLabel.Text = state.ConnectedSemanticModelName ?? "Not connected yet";
         xmlaEndpointValueLabel.Text = state.XmlaEndpoint ?? "Not connected yet";
 
-        daxTargetValueLabel.Text = state.ConnectedSemanticModelName is null
+        var connectedSemanticModelName = state.ConnectedSemanticModelName;
+
+        daxTargetValueLabel.Text = connectedSemanticModelName is null
             ? "Target: none"
-            : $"Target: {state.ConnectedSemanticModelName}";
+            : $"Target: {connectedSemanticModelName}";
 
         daxAvailabilityValueLabel.Text = state switch
         {
