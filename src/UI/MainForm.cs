@@ -1,5 +1,6 @@
 using System.Drawing;
 using System.Windows.Forms;
+using PbiRestProxy.Auth;
 using PbiRestProxy.Logging;
 using PbiRestProxy.Session;
 
@@ -9,6 +10,7 @@ public sealed class MainForm : Form
 {
     private readonly AppSessionService sessionService;
     private readonly LogStore logStore;
+    private readonly AzureCliAccessTokenProvider azureCliAccessTokenProvider;
 
     private Label tokenSourceValueLabel = null!;
     private Label tokenStateValueLabel = null!;
@@ -22,15 +24,19 @@ public sealed class MainForm : Form
     private Label daxTargetValueLabel = null!;
     private Label daxAvailabilityValueLabel = null!;
     private TextBox tokenInputTextBox = null!;
+    private Button azureCliTokenButton = null!;
     private Button applyTokenButton = null!;
     private Button clearTokenButton = null!;
     private ListView logListView = null!;
     private ToolStripStatusLabel sessionStatusLabel = null!;
+    private string? sessionStatusOverrideText;
+    private bool isAcquiringAzureCliToken;
 
     public MainForm(AppSessionService sessionService, LogStore logStore)
     {
         this.sessionService = sessionService;
         this.logStore = logStore;
+        azureCliAccessTokenProvider = new AzureCliAccessTokenProvider(logStore);
 
         InitializeComponent();
         WireEvents();
@@ -76,7 +82,7 @@ public sealed class MainForm : Form
         };
 
         statusStrip.Items.Add(sessionStatusLabel);
-        statusStrip.Items.Add(new ToolStripStatusLabel("Current milestone: UI + session + manual token paste"));
+        statusStrip.Items.Add(new ToolStripStatusLabel("Current milestone: UI + session + Azure CLI/manual token loading"));
 
         Controls.Add(tabControl);
         Controls.Add(statusStrip);
@@ -135,7 +141,7 @@ public sealed class MainForm : Form
     {
         var groupBox = new GroupBox
         {
-            Text = "Manual Access Token",
+            Text = "Access Token",
             Dock = DockStyle.Fill
         };
 
@@ -155,8 +161,15 @@ public sealed class MainForm : Form
         {
             AutoSize = true,
             Dock = DockStyle.Top,
-            Text = "Paste a Power BI / Fabric access token acquired externally, for example via Azure CLI. The token is kept only in memory and is never written to the log."
+            Text = "You can fetch a Power BI / Fabric access token through Azure CLI or paste one manually. The token is kept only in memory and is never written to the log."
         };
+
+        azureCliTokenButton = new Button
+        {
+            AutoSize = true,
+            Text = "Login + Get Token via Azure CLI"
+        };
+        azureCliTokenButton.Click += async (_, _) => await AcquireTokenFromAzureCliAsync();
 
         tokenInputTextBox = new TextBox
         {
@@ -191,6 +204,7 @@ public sealed class MainForm : Form
             WrapContents = false
         };
 
+        buttonPanel.Controls.Add(azureCliTokenButton);
         buttonPanel.Controls.Add(applyTokenButton);
         buttonPanel.Controls.Add(clearTokenButton);
 
@@ -382,6 +396,38 @@ public sealed class MainForm : Form
         }
     }
 
+    private async Task AcquireTokenFromAzureCliAsync()
+    {
+        if (isAcquiringAzureCliToken)
+        {
+            return;
+        }
+
+        try
+        {
+            isAcquiringAzureCliToken = true;
+            sessionStatusOverrideText = "Running Azure CLI login and token acquisition...";
+            UseWaitCursor = true;
+            RefreshSessionState();
+
+            var accessToken = await azureCliAccessTokenProvider.AcquireAccessTokenAsync();
+            sessionService.SetAccessToken(accessToken, AccessTokenSource.AzureCli);
+            tokenInputTextBox.Clear();
+        }
+        catch (Exception ex)
+        {
+            logStore.WriteError("Auth", ex.Message);
+            MessageBox.Show(this, ex.Message, "Azure CLI token acquisition failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            isAcquiringAzureCliToken = false;
+            sessionStatusOverrideText = null;
+            UseWaitCursor = false;
+            RefreshSessionState();
+        }
+    }
+
     private void ClearManualToken()
     {
         tokenInputTextBox.Clear();
@@ -402,6 +448,7 @@ public sealed class MainForm : Form
 
         tokenSourceValueLabel.Text = state.TokenSource switch
         {
+            AccessTokenSource.AzureCli => "Azure CLI",
             AccessTokenSource.Manual => "Manual",
             _ => "Not loaded"
         };
@@ -430,7 +477,7 @@ public sealed class MainForm : Form
             ? "DAX execution will be enabled after XMLA connectivity is added"
             : "Load a valid token first";
 
-        sessionStatusLabel.Text = state.AccessToken switch
+        sessionStatusLabel.Text = sessionStatusOverrideText ?? state.AccessToken switch
         {
             null => "No access token loaded",
             { IsExpired: true } token => $"Loaded expired token for {token.DisplayUser}",
@@ -442,8 +489,9 @@ public sealed class MainForm : Form
 
     private void UpdateTokenInputButtons()
     {
-        applyTokenButton.Enabled = !string.IsNullOrWhiteSpace(tokenInputTextBox.Text);
-        clearTokenButton.Enabled = sessionService.State.HasAccessToken || !string.IsNullOrWhiteSpace(tokenInputTextBox.Text);
+        azureCliTokenButton.Enabled = !isAcquiringAzureCliToken;
+        applyTokenButton.Enabled = !isAcquiringAzureCliToken && !string.IsNullOrWhiteSpace(tokenInputTextBox.Text);
+        clearTokenButton.Enabled = !isAcquiringAzureCliToken && (sessionService.State.HasAccessToken || !string.IsNullOrWhiteSpace(tokenInputTextBox.Text));
     }
 
     private void HandleSessionStateChanged()

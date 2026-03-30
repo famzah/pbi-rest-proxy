@@ -14,7 +14,7 @@ Current implemented milestone:
 
 - desktop WinForms shell with `Connection`, `DAX`, and `Log` tabs
 - in-memory session and status infrastructure
-- manual access-token paste with local JWT claim parsing
+- Azure CLI-assisted or manual access-token loading with local JWT claim parsing
 
 Not implemented yet:
 
@@ -83,7 +83,7 @@ dotnet run --project .\src\pbi-rest-proxy.csproj -c Debug
 
 Or start it from Visual Studio by opening `pbi-rest-proxy.sln` and running the `pbi-rest-proxy` project.
 
-## Current manual test flow
+## Current token test flow
 
 1. Start the desktop app.
 2. If Azure CLI is not installed yet, install it:
@@ -92,10 +92,13 @@ Or start it from Visual Studio by opening `pbi-rest-proxy.sln` and running the `
 winget install --exact --id Microsoft.AzureCLI
 ```
 
-3. Open Azure CLI separately and sign in:
+3. In the app, click `Login + Get Token via Azure CLI`.
+
+Alternative manual shell flow:
 
 ```powershell
 az login --allow-no-subscriptions
+az account get-access-token --resource https://analysis.windows.net/powerbi/api --query accessToken -o tsv
 ```
 
 If you need a specific tenant:
@@ -104,14 +107,8 @@ If you need a specific tenant:
 az login --tenant <tenant-id-or-domain> --allow-no-subscriptions
 ```
 
-4. Acquire a Power BI / Fabric access token:
-
-```powershell
-az account get-access-token --resource https://analysis.windows.net/powerbi/api --query accessToken -o tsv
-```
-
-5. Copy the returned token and paste it into the `Connection` tab.
-6. Confirm that the app shows the parsed user, tenant, audience, and expiration details.
-7. Check the `Log` tab for session events.
+4. If you used the manual shell flow instead of the app button, copy the returned token and paste it into the `Connection` tab.
+5. Confirm that the app shows the parsed user, tenant, audience, and expiration details.
+6. Check the `Log` tab for session events.
 
 The working plan lives in [TODO.md](TODO.md).

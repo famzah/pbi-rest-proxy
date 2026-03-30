@@ -64,9 +64,9 @@ public sealed class AppSessionService
     {
         return source switch
         {
+            AccessTokenSource.AzureCli => "Azure CLI",
             AccessTokenSource.Manual => "Manual",
             _ => source.ToString()
         };
     }
 }
-
