@@ -397,7 +397,20 @@ Current status:
 
 - Rewrite `README.md` once the standalone app structure and usage flow are implemented
 - Add a proper build script for the standalone app
+- Add configurable REST server settings
+- Add configurable REST port
 - Add configurable ADOMD command timeout
+- Add configurable default DAX row limit
+- Improve UI status/error presentation
+- Make REST startup failures clearer in the UI
+- Make other status failures clearer in the UI, including connected/discovery/token errors
+- Document the exact REST response schema in `README.md` for GitHub publication
+- Document the exact `/execute-dax` response schema with a full sample payload
+- Keep the existing `POST /execute-dax` `curl` and PowerShell examples in the published README
 - Add CSV export endpoint for table-shaped results
 - Add request metrics and optional per-request query logging
+- Evaluate DAX-based model metadata queries for read-only scenarios
+- `INFO.VIEW.TABLES()`
+- `INFO.VIEW.COLUMNS()`
+- `INFO.VIEW.RELATIONSHIPS()`
 - Consider replacing shell-out Azure CLI auth with Azure.Identity or MSAL later
