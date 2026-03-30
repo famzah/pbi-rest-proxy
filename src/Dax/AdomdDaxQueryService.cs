@@ -59,8 +59,7 @@ public sealed class AdomdDaxQueryService
             command.CommandText = query;
 
             using var reader = command.ExecuteReader();
-            var resultTable = new DataTable();
-            resultTable.Load(reader);
+            var resultTable = LoadResultTable(reader);
 
             stopwatch.Stop();
 
@@ -83,5 +82,55 @@ public sealed class AdomdDaxQueryService
     {
         var flattened = string.Join(" ", query.Split((string[]?)null, StringSplitOptions.RemoveEmptyEntries));
         return flattened.Length <= 160 ? flattened : $"{flattened[..157]}...";
+    }
+
+    private static DataTable LoadResultTable(AdomdDataReader reader)
+    {
+        var resultTable = new DataTable();
+        var usedColumnNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        for (var columnIndex = 0; columnIndex < reader.FieldCount; columnIndex++)
+        {
+            var columnName = BuildUniqueColumnName(reader.GetName(columnIndex), columnIndex, usedColumnNames);
+            var columnType = reader.GetFieldType(columnIndex);
+
+            resultTable.Columns.Add(new DataColumn(columnName, columnType));
+        }
+
+        while (reader.Read())
+        {
+            var values = new object[reader.FieldCount];
+            reader.GetValues(values);
+
+            for (var columnIndex = 0; columnIndex < values.Length; columnIndex++)
+            {
+                if (values[columnIndex] is null)
+                {
+                    values[columnIndex] = DBNull.Value;
+                }
+            }
+
+            resultTable.Rows.Add(values);
+        }
+
+        return resultTable;
+    }
+
+    private static string BuildUniqueColumnName(string? rawColumnName, int columnIndex, ISet<string> usedColumnNames)
+    {
+        var baseName = string.IsNullOrWhiteSpace(rawColumnName)
+            ? $"Column{columnIndex + 1}"
+            : rawColumnName;
+
+        var candidate = baseName;
+        var suffix = 2;
+
+        while (!usedColumnNames.Add(candidate))
+        {
+            candidate = $"{baseName}_{suffix}";
+            suffix++;
+        }
+
+        return candidate;
     }
 }
