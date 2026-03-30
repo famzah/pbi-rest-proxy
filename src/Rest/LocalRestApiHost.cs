@@ -182,6 +182,11 @@ public sealed class LocalRestApiHost : IAsyncDisposable
                     connectedSemanticModel = sessionState.ConnectedSemanticModelName,
                     xmlaEndpoint = sessionState.XmlaEndpoint,
                     hasConnectedTarget = sessionState.HasConnectedTarget
+                },
+                daxExecution = new
+                {
+                    commandTimeoutSeconds = daxQueryService.Options.CommandTimeoutSeconds,
+                    rowLimit = daxQueryService.Options.RowLimit
                 }
             });
         });
@@ -198,15 +203,32 @@ public sealed class LocalRestApiHost : IAsyncDisposable
                 return Results.Conflict(new { error = failureMessage });
             }
 
-            var result = await Task.Run(
-                () => daxQueryService.Execute(
-                    queryContext!.AccessToken,
-                    queryContext.ParsedAccessToken,
-                    queryContext.XmlaEndpoint,
-                    queryContext.SemanticModelName,
-                    request.Query)).ConfigureAwait(false);
+            try
+            {
+                var result = await Task.Run(
+                    () => daxQueryService.Execute(
+                        queryContext!.AccessToken,
+                        queryContext.ParsedAccessToken,
+                        queryContext.XmlaEndpoint,
+                        queryContext.SemanticModelName,
+                        request.Query)).ConfigureAwait(false);
 
-            return Results.Ok(DaxResultPayload.Create(queryContext!, result));
+                return Results.Ok(DaxResultPayload.Create(queryContext!, result));
+            }
+            catch (DaxQueryExecutionException ex) when (ex.FailureKind == DaxQueryFailureKind.Timeout)
+            {
+                return Results.Json(
+                    new
+                    {
+                        error = ex.Message,
+                        timeoutSeconds = daxQueryService.Options.CommandTimeoutSeconds
+                    },
+                    statusCode: StatusCodes.Status504GatewayTimeout);
+            }
+            catch (DaxQueryExecutionException ex)
+            {
+                return Results.Json(new { error = ex.Message }, statusCode: StatusCodes.Status500InternalServerError);
+            }
         });
     }
 }

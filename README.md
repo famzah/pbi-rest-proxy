@@ -19,6 +19,7 @@ Current implemented milestone:
 - selected-model connect/disconnect flow with computed XMLA workspace endpoint
 - localhost-only REST server with `GET /health`, `GET /info`, and `POST /execute-dax`
 - DAX execution against the connected semantic model over XMLA, with compact JSON rows plus column metadata
+- default DAX safeguards: `30` second command timeout and `1000` row limit
 
 Skipped for now:
 
@@ -147,5 +148,16 @@ The `--%` is important when you run `curl` from PowerShell, otherwise PowerShell
 - explicit column metadata in `columns`
 - exact column names as returned by ADOMD, including empty or duplicate captions
 - target metadata such as `workspace`, `semanticModel`, and `xmlaEndpoint`
+- `isTruncated` and `rowLimit` when the result is capped by the configured row limit
+
+Current DAX execution defaults:
+
+- command timeout: `30` seconds
+- row limit: `1000`
+
+Behavior when a limit is hit:
+
+- row limit: the request still succeeds with `200 OK`, but the payload reports `isTruncated: true`
+- timeout: the REST API returns `504 Gateway Timeout`, and the DAX tab reports a timeout instead of generic failure
 
 The working plan lives in [TODO.md](TODO.md).

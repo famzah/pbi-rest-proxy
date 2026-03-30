@@ -170,6 +170,7 @@ Implemented:
 - Phase 7 DAX execution against the connected semantic model
 - Phase 8 localhost-only REST API with `/health`, `/info`, and `/execute-dax`
 - DAX output now uses compact row arrays plus explicit column metadata instead of `DataTable`-style shaping
+- DAX execution now enforces a `30` second timeout and a `1000` row limit
 
 Skipped:
 
@@ -262,6 +263,7 @@ Change:
 Current status:
 - Implemented in-process and bound to `127.0.0.1`
 - `/execute-dax` returns compact row arrays and explicit column metadata without `DataTable` normalization
+- `/execute-dax` returns `504` on timeout and `200` with truncation metadata when the row limit is hit
 
 #### Semantic model discovery
 
@@ -386,6 +388,9 @@ Notes:
 - show token expiration warnings
 - return clear API errors when no current model is connected
 - keep localhost-only binding
+
+Current status:
+- partially implemented via DAX timeout and row limit guardrails
 
 ## Later follow-ups
 

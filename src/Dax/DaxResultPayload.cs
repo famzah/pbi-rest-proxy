@@ -7,6 +7,8 @@ public sealed record DaxResultPayload(
     string? Workspace,
     string XmlaEndpoint,
     double ElapsedMs,
+    bool IsTruncated,
+    int RowLimit,
     IReadOnlyList<DaxResultColumn> Columns,
     IReadOnlyList<IReadOnlyList<object?>> Rows)
 {
@@ -21,6 +23,8 @@ public sealed record DaxResultPayload(
             queryContext.WorkspaceName,
             queryContext.XmlaEndpoint,
             result.Elapsed.TotalMilliseconds,
+            result.IsTruncated,
+            result.RowLimit,
             result.Columns,
             result.Rows);
     }

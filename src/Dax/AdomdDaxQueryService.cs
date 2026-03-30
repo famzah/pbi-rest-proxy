@@ -10,11 +10,15 @@ namespace PbiRestProxy.Dax;
 public sealed class AdomdDaxQueryService
 {
     private readonly LogStore logStore;
+    private readonly DaxExecutionOptions options;
 
-    public AdomdDaxQueryService(LogStore logStore)
+    public AdomdDaxQueryService(LogStore logStore, DaxExecutionOptions? options = null)
     {
         this.logStore = logStore;
+        this.options = options ?? DaxExecutionOptions.Default;
     }
+
+    public DaxExecutionOptions Options => options;
 
     public DaxQueryResult Execute(
         string accessToken,
@@ -44,7 +48,9 @@ public sealed class AdomdDaxQueryService
         }
 
         var queryPreview = BuildQueryPreview(query);
-        logStore.WriteInfo("DAX", $"Executing DAX query against semantic model '{initialCatalog}'. Preview: {queryPreview}");
+        logStore.WriteInfo(
+            "DAX",
+            $"Executing DAX query against semantic model '{initialCatalog}'. Preview: {queryPreview} Timeout={options.CommandTimeoutSeconds}s RowLimit={options.RowLimit}.");
 
         try
         {
@@ -57,23 +63,32 @@ public sealed class AdomdDaxQueryService
 
             using var command = connection.CreateCommand();
             command.CommandText = query;
+            command.CommandTimeout = options.CommandTimeoutSeconds;
 
             using var reader = command.ExecuteReader();
-            var (columns, rows) = LoadResult(reader);
+            var (columns, rows, isTruncated) = LoadResult(reader, options.RowLimit);
             stopwatch.Stop();
-            var result = new DaxQueryResult(columns, rows, stopwatch.Elapsed);
+            var result = new DaxQueryResult(columns, rows, stopwatch.Elapsed, isTruncated, options.RowLimit);
 
-            logStore.WriteInfo(
-                "DAX",
-                $"DAX query completed in {result.Elapsed.TotalMilliseconds:N0} ms with {result.RowCount} row(s).");
+            var completionMessage = result.IsTruncated
+                ? $"DAX query completed in {result.Elapsed.TotalMilliseconds:N0} ms with {result.RowCount} row(s). Result truncated at the configured row limit of {result.RowLimit}."
+                : $"DAX query completed in {result.Elapsed.TotalMilliseconds:N0} ms with {result.RowCount} row(s).";
+
+            logStore.WriteInfo("DAX", completionMessage);
 
             return result;
+        }
+        catch (Exception ex) when (IsTimeoutException(ex))
+        {
+            var message = $"The DAX query exceeded the configured timeout of {options.CommandTimeoutSeconds} seconds.";
+            logStore.WriteWarning("DAX", $"Timeout executing DAX query for semantic model '{initialCatalog}' at '{xmlaEndpoint}'. {message}");
+            throw new DaxQueryExecutionException(DaxQueryFailureKind.Timeout, message, ex);
         }
         catch (Exception ex)
         {
             var message = $"DAX execution failed for semantic model '{initialCatalog}' at '{xmlaEndpoint}'. {ex.Message}";
             logStore.WriteError("DAX", message);
-            throw new InvalidOperationException(message, ex);
+            throw new DaxQueryExecutionException(DaxQueryFailureKind.General, message, ex);
         }
     }
 
@@ -83,7 +98,9 @@ public sealed class AdomdDaxQueryService
         return flattened.Length <= 160 ? flattened : $"{flattened[..157]}...";
     }
 
-    private static (IReadOnlyList<DaxResultColumn> Columns, IReadOnlyList<IReadOnlyList<object?>> Rows) LoadResult(AdomdDataReader reader)
+    private static (IReadOnlyList<DaxResultColumn> Columns, IReadOnlyList<IReadOnlyList<object?>> Rows, bool IsTruncated) LoadResult(
+        AdomdDataReader reader,
+        int rowLimit)
     {
         var columns = new DaxResultColumn[reader.FieldCount];
 
@@ -99,9 +116,16 @@ public sealed class AdomdDaxQueryService
         }
 
         var rows = new List<IReadOnlyList<object?>>();
+        var isTruncated = false;
 
         while (reader.Read())
         {
+            if (rows.Count == rowLimit)
+            {
+                isTruncated = true;
+                break;
+            }
+
             var rawValues = new object[reader.FieldCount];
             var values = new object?[reader.FieldCount];
             reader.GetValues(rawValues);
@@ -114,7 +138,7 @@ public sealed class AdomdDaxQueryService
             rows.Add(values);
         }
 
-        return (columns, rows);
+        return (columns, rows, isTruncated);
     }
 
     private static object? NormalizeValue(object? value)
@@ -146,5 +170,11 @@ public sealed class AdomdDaxQueryService
             IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
             _ => value.ToString()
         };
+    }
+
+    private static bool IsTimeoutException(Exception exception)
+    {
+        return exception.Message.Contains("timeout", StringComparison.OrdinalIgnoreCase) ||
+               exception.Message.Contains("timed out", StringComparison.OrdinalIgnoreCase);
     }
 }

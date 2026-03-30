@@ -870,10 +870,25 @@ public sealed class MainForm : Form
 
             var payload = DaxResultPayload.Create(queryContext!, result);
             daxJsonOutputTextBox.Text = JsonSerializer.Serialize(payload, AppJson.CreateSerializerOptions(writeIndented: true));
-            daxSummaryText = $"Result: {result.RowCount} row(s) in {result.Elapsed.TotalMilliseconds:N0} ms";
+            daxSummaryText = result.IsTruncated
+                ? $"Result: {result.RowCount} row(s), truncated at {result.RowLimit}, in {result.Elapsed.TotalMilliseconds:N0} ms"
+                : $"Result: {result.RowCount} row(s) in {result.Elapsed.TotalMilliseconds:N0} ms";
+        }
+        catch (DaxQueryExecutionException ex) when (ex.FailureKind == DaxQueryFailureKind.Timeout)
+        {
+            daxJsonOutputTextBox.Clear();
+            daxSummaryText = $"Result: timed out after {daxQueryService.Options.CommandTimeoutSeconds} s";
+            MessageBox.Show(this, ex.Message, "DAX query timed out", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+        }
+        catch (DaxQueryExecutionException ex)
+        {
+            daxJsonOutputTextBox.Clear();
+            daxSummaryText = "Result: failed";
+            MessageBox.Show(this, ex.Message, "DAX execution failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         catch (Exception ex)
         {
+            daxJsonOutputTextBox.Clear();
             daxSummaryText = "Result: failed";
             MessageBox.Show(this, ex.Message, "DAX execution failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
