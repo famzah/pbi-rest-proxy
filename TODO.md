@@ -404,6 +404,9 @@ Current status:
 - Improve UI status/error presentation
 - Make REST startup failures clearer in the UI
 - Make other status failures clearer in the UI, including connected/discovery/token errors
+- Add visual status indicators in the UI instead of relying only on text
+- Use status colors consistently, for example: green for healthy/connected, red for errors, gray for neutral/not connected
+- Consider lightweight per-tab status indicators, such as colored dots for `Connection` and `Data Source`, so problems are visible without opening each tab
 - Document the exact REST response schema in `README.md` for GitHub publication
 - Document the exact `/execute-dax` response schema with a full sample payload
 - Keep the existing `POST /execute-dax` `curl` and PowerShell examples in the published README
