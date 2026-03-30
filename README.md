@@ -121,8 +121,23 @@ az login --tenant <tenant-id-or-domain> --allow-no-subscriptions
 ```powershell
 Invoke-RestMethod http://127.0.0.1:51087/health
 Invoke-RestMethod http://127.0.0.1:51087/info
+```
+
+`POST /execute-dax` examples:
+
+PowerShell:
+
+```powershell
 Invoke-RestMethod http://127.0.0.1:51087/execute-dax -Method Post -ContentType "application/json" -Body '{"query":"EVALUATE ROW(\"Status\", \"REST\")"}'
 ```
+
+`curl` from PowerShell:
+
+```powershell
+curl --% http://127.0.0.1:51087/execute-dax -H "Content-Type: application/json" --raw-data '{"query":"EVALUATE ROW(\"Status\", \"REST\")"}'
+```
+
+The `--%` is important when you run `curl` from PowerShell, otherwise PowerShell rewrites the argument quoting before `curl` receives it.
 
 13. Check the `Log` tab for auth, discovery, connection, REST, and DAX events.
 
