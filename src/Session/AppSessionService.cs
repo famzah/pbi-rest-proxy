@@ -1,3 +1,4 @@
+using PbiRestProxy.Discovery;
 using PbiRestProxy.Logging;
 
 namespace PbiRestProxy.Session;
@@ -27,7 +28,10 @@ public sealed class AppSessionService
         State = State with
         {
             TokenSource = source,
-            AccessToken = parsedToken
+            AccessToken = parsedToken,
+            SelectedWorkspace = null,
+            SelectedSemanticModel = null,
+            XmlaEndpoint = null
         };
 
         logStore.WriteInfo(
@@ -53,10 +57,87 @@ public sealed class AppSessionService
         State = State with
         {
             TokenSource = null,
-            AccessToken = null
+            AccessToken = null,
+            SelectedWorkspace = null,
+            SelectedSemanticModel = null,
+            XmlaEndpoint = null
         };
 
         logStore.WriteInfo("Auth", "Access token cleared from the current session.");
+        StateChanged?.Invoke();
+    }
+
+    public void SetSelectedWorkspace(WorkspaceSummary? workspace)
+    {
+        if (State.SelectedWorkspace?.Id == workspace?.Id)
+        {
+            return;
+        }
+
+        State = State with
+        {
+            SelectedWorkspace = workspace,
+            SelectedSemanticModel = null,
+            XmlaEndpoint = null
+        };
+
+        if (workspace is null)
+        {
+            logStore.WriteInfo("Discovery", "Workspace selection cleared.");
+        }
+        else
+        {
+            logStore.WriteInfo("Discovery", $"Selected workspace '{workspace.Name}'.");
+        }
+
+        StateChanged?.Invoke();
+    }
+
+    public void SetSelectedSemanticModel(SemanticModelSummary? semanticModel)
+    {
+        if (semanticModel is not null && State.SelectedWorkspace is null)
+        {
+            throw new InvalidOperationException("A workspace must be selected before choosing a semantic model.");
+        }
+
+        if (State.SelectedSemanticModel?.Id == semanticModel?.Id)
+        {
+            return;
+        }
+
+        State = State with
+        {
+            SelectedSemanticModel = semanticModel,
+            XmlaEndpoint = null
+        };
+
+        if (semanticModel is null)
+        {
+            logStore.WriteInfo("Discovery", "Semantic model selection cleared.");
+        }
+        else
+        {
+            logStore.WriteInfo("Discovery", $"Selected semantic model '{semanticModel.Name}'.");
+        }
+
+        StateChanged?.Invoke();
+    }
+
+    public void ClearSelection()
+    {
+        if (State.SelectedWorkspace is null && State.SelectedSemanticModel is null && State.XmlaEndpoint is null)
+        {
+            return;
+        }
+
+        State = State with
+        {
+            SelectedWorkspace = null,
+            SelectedSemanticModel = null,
+            XmlaEndpoint = null
+        };
+
+        logStore.WriteInfo("Discovery", "Workspace and semantic model selections cleared.");
         StateChanged?.Invoke();
     }
 

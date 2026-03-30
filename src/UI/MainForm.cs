@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 using PbiRestProxy.Auth;
+using PbiRestProxy.Discovery;
 using PbiRestProxy.Logging;
 using PbiRestProxy.Session;
 
@@ -11,6 +12,7 @@ public sealed class MainForm : Form
     private readonly AppSessionService sessionService;
     private readonly LogStore logStore;
     private readonly AzureCliAccessTokenProvider azureCliAccessTokenProvider;
+    private readonly PowerBiDiscoveryService discoveryService;
 
     private Label tokenSourceValueLabel = null!;
     private Label tokenStateValueLabel = null!;
@@ -27,15 +29,22 @@ public sealed class MainForm : Form
     private Button azureCliTokenButton = null!;
     private Button applyTokenButton = null!;
     private Button clearTokenButton = null!;
+    private Button loadWorkspacesButton = null!;
+    private Button loadSemanticModelsButton = null!;
+    private ListView workspaceListView = null!;
+    private ListView semanticModelListView = null!;
     private ListView logListView = null!;
     private ToolStripStatusLabel sessionStatusLabel = null!;
     private string? sessionStatusOverrideText;
     private bool isAcquiringAzureCliToken;
+    private bool isLoadingWorkspaces;
+    private bool isLoadingSemanticModels;
 
-    public MainForm(AppSessionService sessionService, LogStore logStore)
+    public MainForm(AppSessionService sessionService, LogStore logStore, PowerBiDiscoveryService discoveryService)
     {
         this.sessionService = sessionService;
         this.logStore = logStore;
+        this.discoveryService = discoveryService;
         azureCliAccessTokenProvider = new AzureCliAccessTokenProvider(logStore);
 
         InitializeComponent();
@@ -82,7 +91,7 @@ public sealed class MainForm : Form
         };
 
         statusStrip.Items.Add(sessionStatusLabel);
-        statusStrip.Items.Add(new ToolStripStatusLabel("Current milestone: UI + session + Azure CLI/manual token loading"));
+        statusStrip.Items.Add(new ToolStripStatusLabel("Current milestone: UI + session + token loading + Power BI discovery"));
 
         Controls.Add(tabControl);
         Controls.Add(statusStrip);
@@ -99,16 +108,18 @@ public sealed class MainForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(12),
             ColumnCount = 1,
-            RowCount = 3
+            RowCount = 4
         };
 
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 40f));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 60f));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
         root.Controls.Add(BuildStatusGroupBox(), 0, 0);
         root.Controls.Add(BuildTokenInputGroupBox(), 0, 1);
-        root.Controls.Add(BuildTargetGroupBox(), 0, 2);
+        root.Controls.Add(BuildDiscoveryGroupBox(), 0, 2);
+        root.Controls.Add(BuildTargetGroupBox(), 0, 3);
 
         page.Controls.Add(root);
         return page;
@@ -216,11 +227,79 @@ public sealed class MainForm : Form
         return groupBox;
     }
 
+    private Control BuildDiscoveryGroupBox()
+    {
+        var groupBox = new GroupBox
+        {
+            Text = "Discovery",
+            Dock = DockStyle.Fill
+        };
+
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12),
+            ColumnCount = 1,
+            RowCount = 2
+        };
+
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+        var toolbar = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = false
+        };
+
+        loadWorkspacesButton = new Button
+        {
+            AutoSize = true,
+            Text = "Load Workspaces"
+        };
+        loadWorkspacesButton.Click += async (_, _) => await LoadWorkspacesAsync();
+
+        loadSemanticModelsButton = new Button
+        {
+            AutoSize = true,
+            Text = "Load Models"
+        };
+        loadSemanticModelsButton.Click += async (_, _) => await LoadSemanticModelsAsync();
+
+        toolbar.Controls.Add(loadWorkspacesButton);
+        toolbar.Controls.Add(loadSemanticModelsButton);
+
+        workspaceListView = CreateWorkspaceListView();
+        semanticModelListView = CreateSemanticModelListView();
+
+        var listsLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1
+        };
+
+        listsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 42f));
+        listsLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 58f));
+        listsLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+        listsLayout.Controls.Add(BuildListPane("Workspaces", workspaceListView), 0, 0);
+        listsLayout.Controls.Add(BuildListPane("Semantic Models", semanticModelListView), 1, 0);
+
+        layout.Controls.Add(toolbar, 0, 0);
+        layout.Controls.Add(listsLayout, 0, 1);
+
+        groupBox.Controls.Add(layout);
+        return groupBox;
+    }
+
     private Control BuildTargetGroupBox()
     {
         var groupBox = new GroupBox
         {
-            Text = "Current Target",
+            Text = "Current Selection",
             Dock = DockStyle.Top,
             AutoSize = true,
             AutoSizeMode = AutoSizeMode.GrowAndShrink
@@ -374,12 +453,76 @@ public sealed class MainForm : Form
         return page;
     }
 
+    private static Control BuildListPane(string title, ListView listView)
+    {
+        var panel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = new Padding(0)
+        };
+
+        panel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        panel.RowStyles.Add(new RowStyle(SizeType.Percent, 100f));
+
+        var label = new Label
+        {
+            AutoSize = true,
+            Dock = DockStyle.Fill,
+            Margin = new Padding(0, 0, 0, 8),
+            Text = title
+        };
+
+        panel.Controls.Add(label, 0, 0);
+        panel.Controls.Add(listView, 0, 1);
+
+        return panel;
+    }
+
+    private static ListView CreateWorkspaceListView()
+    {
+        var listView = new ListView
+        {
+            Dock = DockStyle.Fill,
+            FullRowSelect = true,
+            GridLines = true,
+            HideSelection = false,
+            MultiSelect = false,
+            View = View.Details
+        };
+
+        listView.Columns.Add("Workspace", 280);
+        listView.Columns.Add("Capacity", 120);
+        return listView;
+    }
+
+    private static ListView CreateSemanticModelListView()
+    {
+        var listView = new ListView
+        {
+            Dock = DockStyle.Fill,
+            FullRowSelect = true,
+            GridLines = true,
+            HideSelection = false,
+            MultiSelect = false,
+            View = View.Details
+        };
+
+        listView.Columns.Add("Semantic Model", 300);
+        listView.Columns.Add("Owner", 260);
+        listView.Columns.Add("Refreshable", 110);
+        return listView;
+    }
+
     private void WireEvents()
     {
         sessionService.StateChanged += HandleSessionStateChanged;
         logStore.EntryAdded += HandleLogEntryAdded;
         logStore.Cleared += HandleLogCleared;
-        tokenInputTextBox.TextChanged += (_, _) => UpdateTokenInputButtons();
+        tokenInputTextBox.TextChanged += (_, _) => UpdateActionButtons();
+        workspaceListView.SelectedIndexChanged += (_, _) => HandleWorkspaceSelectionChanged();
+        semanticModelListView.SelectedIndexChanged += (_, _) => HandleSemanticModelSelectionChanged();
     }
 
     private void ApplyManualToken()
@@ -387,6 +530,7 @@ public sealed class MainForm : Form
         try
         {
             sessionService.SetAccessToken(tokenInputTextBox.Text, AccessTokenSource.Manual);
+            ResetDiscoveryLists();
             tokenInputTextBox.Clear();
         }
         catch (InvalidAccessTokenException ex)
@@ -406,12 +550,13 @@ public sealed class MainForm : Form
         try
         {
             isAcquiringAzureCliToken = true;
-            sessionStatusOverrideText = "Running Azure CLI login and token acquisition...";
+            sessionStatusOverrideText = "Running Azure CLI token acquisition...";
             UseWaitCursor = true;
             RefreshSessionState();
 
             var accessToken = await azureCliAccessTokenProvider.AcquireAccessTokenAsync();
             sessionService.SetAccessToken(accessToken, AccessTokenSource.AzureCli);
+            ResetDiscoveryLists();
             tokenInputTextBox.Clear();
         }
         catch (Exception ex)
@@ -432,6 +577,7 @@ public sealed class MainForm : Form
     {
         tokenInputTextBox.Clear();
         sessionService.ClearAccessToken();
+        ResetDiscoveryLists();
     }
 
     private void LoadExistingLogEntries()
@@ -484,14 +630,245 @@ public sealed class MainForm : Form
             var token => $"Loaded token for {token!.DisplayUser}"
         };
 
-        UpdateTokenInputButtons();
+        UpdateActionButtons();
     }
 
-    private void UpdateTokenInputButtons()
+    private void UpdateActionButtons()
     {
-        azureCliTokenButton.Enabled = !isAcquiringAzureCliToken;
-        applyTokenButton.Enabled = !isAcquiringAzureCliToken && !string.IsNullOrWhiteSpace(tokenInputTextBox.Text);
-        clearTokenButton.Enabled = !isAcquiringAzureCliToken && (sessionService.State.HasAccessToken || !string.IsNullOrWhiteSpace(tokenInputTextBox.Text));
+        var isBusy = isAcquiringAzureCliToken || isLoadingWorkspaces || isLoadingSemanticModels;
+
+        azureCliTokenButton.Enabled = !isBusy;
+        applyTokenButton.Enabled = !isBusy && !string.IsNullOrWhiteSpace(tokenInputTextBox.Text);
+        clearTokenButton.Enabled = !isBusy && (sessionService.State.HasAccessToken || !string.IsNullOrWhiteSpace(tokenInputTextBox.Text));
+        loadWorkspacesButton.Enabled = !isBusy && sessionService.State.HasUsableAccessToken;
+        loadSemanticModelsButton.Enabled =
+            !isBusy &&
+            sessionService.State.HasUsableAccessToken &&
+            sessionService.State.SelectedWorkspace is not null;
+    }
+
+    private async Task LoadWorkspacesAsync()
+    {
+        if (isLoadingWorkspaces)
+        {
+            return;
+        }
+
+        if (!sessionService.State.HasUsableAccessToken || sessionService.CurrentAccessToken is null)
+        {
+            const string message = "Load a non-expired access token before loading workspaces.";
+            logStore.WriteWarning("Discovery", message);
+            MessageBox.Show(this, message, "No access token", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        try
+        {
+            isLoadingWorkspaces = true;
+            sessionStatusOverrideText = "Loading workspaces...";
+            UseWaitCursor = true;
+            RefreshSessionState();
+
+            var workspaces = await discoveryService.LoadWorkspacesAsync(sessionService.CurrentAccessToken);
+            PopulateWorkspaces(workspaces);
+
+            if (workspaces.Count == 0)
+            {
+                sessionService.ClearSelection();
+                logStore.WriteWarning("Discovery", "No accessible workspaces were returned for the current user.");
+            }
+        }
+        catch (Exception ex)
+        {
+            logStore.WriteError("Discovery", ex.Message);
+            MessageBox.Show(this, ex.Message, "Workspace discovery failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            isLoadingWorkspaces = false;
+            sessionStatusOverrideText = null;
+            UseWaitCursor = false;
+            RefreshSessionState();
+        }
+    }
+
+    private async Task LoadSemanticModelsAsync()
+    {
+        if (isLoadingSemanticModels)
+        {
+            return;
+        }
+
+        if (!sessionService.State.HasUsableAccessToken || sessionService.CurrentAccessToken is null)
+        {
+            const string message = "Load a non-expired access token before loading semantic models.";
+            logStore.WriteWarning("Discovery", message);
+            MessageBox.Show(this, message, "No access token", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        var workspace = sessionService.State.SelectedWorkspace;
+
+        if (workspace is null)
+        {
+            const string message = "Select a workspace first.";
+            logStore.WriteWarning("Discovery", message);
+            MessageBox.Show(this, message, "No workspace selected", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        try
+        {
+            isLoadingSemanticModels = true;
+            sessionStatusOverrideText = $"Loading semantic models for {workspace.Name}...";
+            UseWaitCursor = true;
+            RefreshSessionState();
+
+            var semanticModels = await discoveryService.LoadSemanticModelsAsync(sessionService.CurrentAccessToken, workspace);
+            PopulateSemanticModels(semanticModels);
+
+            if (semanticModels.Count == 0)
+            {
+                sessionService.SetSelectedSemanticModel(null);
+                logStore.WriteWarning("Discovery", $"No semantic models were returned for workspace '{workspace.Name}'.");
+            }
+        }
+        catch (Exception ex)
+        {
+            logStore.WriteError("Discovery", ex.Message);
+            MessageBox.Show(this, ex.Message, "Semantic model discovery failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            isLoadingSemanticModels = false;
+            sessionStatusOverrideText = null;
+            UseWaitCursor = false;
+            RefreshSessionState();
+        }
+    }
+
+    private void HandleWorkspaceSelectionChanged()
+    {
+        var selectedWorkspace = GetSelectedWorkspace();
+        var previousWorkspaceId = sessionService.State.SelectedWorkspace?.Id;
+
+        sessionService.SetSelectedWorkspace(selectedWorkspace);
+
+        if (selectedWorkspace is null || !string.Equals(previousWorkspaceId, selectedWorkspace.Id, StringComparison.Ordinal))
+        {
+            PopulateSemanticModels([]);
+        }
+    }
+
+    private void HandleSemanticModelSelectionChanged()
+    {
+        var selectedSemanticModel = GetSelectedSemanticModel();
+        sessionService.SetSelectedSemanticModel(selectedSemanticModel);
+    }
+
+    private WorkspaceSummary? GetSelectedWorkspace()
+    {
+        return workspaceListView.SelectedItems.Count == 0
+            ? null
+            : workspaceListView.SelectedItems[0].Tag as WorkspaceSummary;
+    }
+
+    private SemanticModelSummary? GetSelectedSemanticModel()
+    {
+        return semanticModelListView.SelectedItems.Count == 0
+            ? null
+            : semanticModelListView.SelectedItems[0].Tag as SemanticModelSummary;
+    }
+
+    private void PopulateWorkspaces(IReadOnlyList<WorkspaceSummary> workspaces)
+    {
+        var selectedWorkspaceId = sessionService.State.SelectedWorkspace?.Id;
+
+        workspaceListView.BeginUpdate();
+
+        try
+        {
+            workspaceListView.Items.Clear();
+
+            foreach (var workspace in workspaces)
+            {
+                var item = new ListViewItem(workspace.Name)
+                {
+                    Tag = workspace
+                };
+
+                item.SubItems.Add(workspace.CapacityDisplay);
+                workspaceListView.Items.Add(item);
+            }
+        }
+        finally
+        {
+            workspaceListView.EndUpdate();
+        }
+
+        PopulateSemanticModels([]);
+        RestoreListSelection(workspaceListView, selectedWorkspaceId);
+    }
+
+    private void PopulateSemanticModels(IReadOnlyList<SemanticModelSummary> semanticModels)
+    {
+        var selectedSemanticModelId = sessionService.State.SelectedSemanticModel?.Id;
+
+        semanticModelListView.BeginUpdate();
+
+        try
+        {
+            semanticModelListView.Items.Clear();
+
+            foreach (var semanticModel in semanticModels)
+            {
+                var item = new ListViewItem(semanticModel.Name)
+                {
+                    Tag = semanticModel
+                };
+
+                item.SubItems.Add(semanticModel.OwnerDisplay);
+                item.SubItems.Add(semanticModel.RefreshableDisplay);
+                semanticModelListView.Items.Add(item);
+            }
+        }
+        finally
+        {
+            semanticModelListView.EndUpdate();
+        }
+
+        RestoreListSelection(semanticModelListView, selectedSemanticModelId);
+    }
+
+    private void ResetDiscoveryLists()
+    {
+        PopulateWorkspaces([]);
+        sessionService.ClearSelection();
+    }
+
+    private static void RestoreListSelection(ListView listView, string? selectedItemId)
+    {
+        if (string.IsNullOrWhiteSpace(selectedItemId))
+        {
+            return;
+        }
+
+        foreach (ListViewItem item in listView.Items)
+        {
+            switch (item.Tag)
+            {
+                case WorkspaceSummary workspace when string.Equals(workspace.Id, selectedItemId, StringComparison.Ordinal):
+                    item.Selected = true;
+                    item.Focused = true;
+                    item.EnsureVisible();
+                    return;
+                case SemanticModelSummary semanticModel when string.Equals(semanticModel.Id, selectedItemId, StringComparison.Ordinal):
+                    item.Selected = true;
+                    item.Focused = true;
+                    item.EnsureVisible();
+                    return;
+            }
+        }
     }
 
     private void HandleSessionStateChanged()

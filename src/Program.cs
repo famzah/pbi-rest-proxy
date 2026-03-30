@@ -1,4 +1,5 @@
 using System.Windows.Forms;
+using PbiRestProxy.Discovery;
 using PbiRestProxy.Logging;
 using PbiRestProxy.Session;
 using PbiRestProxy.UI;
@@ -15,9 +16,10 @@ internal static class Program
 
         var logStore = new LogStore();
         var sessionService = new AppSessionService(logStore);
+        var discoveryService = new PowerBiDiscoveryService(logStore);
 
         logStore.WriteInfo("App", "Started pbi-rest-proxy desktop shell.");
 
-        Application.Run(new MainForm(sessionService, logStore));
+        Application.Run(new MainForm(sessionService, logStore, discoveryService));
     }
 }

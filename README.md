@@ -15,10 +15,10 @@ Current implemented milestone:
 - desktop WinForms shell with `Connection`, `DAX`, and `Log` tabs
 - in-memory session and status infrastructure
 - Azure CLI-assisted or manual access-token loading with local JWT claim parsing
+- Power BI workspace and semantic model discovery from the `Connection` tab
 
 Not implemented yet:
 
-- Power BI / Fabric model discovery
 - XMLA connectivity
 - DAX execution
 - local REST API
@@ -109,6 +109,8 @@ az login --tenant <tenant-id-or-domain> --allow-no-subscriptions
 
 4. If you used the manual shell flow instead of the app button, copy the returned token and paste it into the `Connection` tab.
 5. Confirm that the app shows the parsed user, tenant, audience, and expiration details.
-6. Check the `Log` tab for session events.
+6. In the `Connection` tab, click `Load Workspaces`.
+7. Select a workspace and click `Load Models`.
+8. Check the `Log` tab for auth and discovery events.
 
 The working plan lives in [TODO.md](TODO.md).

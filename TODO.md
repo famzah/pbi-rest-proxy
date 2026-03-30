@@ -156,6 +156,15 @@ Build a standalone Windows app with:
 - direct DAX test UI retained
 - local in-memory session for the selected semantic model
 
+## Current progress
+
+Implemented:
+
+- Phase 1 desktop WinForms shell with `Connection`, `DAX`, and `Log` tabs
+- Phase 2 in-memory session and status infrastructure
+- Phase 3 Azure CLI-assisted and manual token loading
+- Phase 4 Power BI workspace and semantic model discovery
+
 ## MVP scope
 
 ### UI tabs
