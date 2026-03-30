@@ -1,5 +1,5 @@
-using System.Data;
 using System.Diagnostics;
+using System.Globalization;
 using Microsoft.AnalysisServices;
 using Microsoft.AnalysisServices.AdomdClient;
 using PbiRestProxy.Logging;
@@ -59,11 +59,10 @@ public sealed class AdomdDaxQueryService
             command.CommandText = query;
 
             using var reader = command.ExecuteReader();
-            var resultTable = LoadResultTable(reader);
-
+            var (columns, rows) = LoadResult(reader);
             stopwatch.Stop();
+            var result = new DaxQueryResult(columns, rows, stopwatch.Elapsed);
 
-            var result = new DaxQueryResult(resultTable, stopwatch.Elapsed);
             logStore.WriteInfo(
                 "DAX",
                 $"DAX query completed in {result.Elapsed.TotalMilliseconds:N0} ms with {result.RowCount} row(s).");
@@ -84,53 +83,68 @@ public sealed class AdomdDaxQueryService
         return flattened.Length <= 160 ? flattened : $"{flattened[..157]}...";
     }
 
-    private static DataTable LoadResultTable(AdomdDataReader reader)
+    private static (IReadOnlyList<DaxResultColumn> Columns, IReadOnlyList<IReadOnlyList<object?>> Rows) LoadResult(AdomdDataReader reader)
     {
-        var resultTable = new DataTable();
-        var usedColumnNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var columns = new DaxResultColumn[reader.FieldCount];
 
         for (var columnIndex = 0; columnIndex < reader.FieldCount; columnIndex++)
         {
-            var columnName = BuildUniqueColumnName(reader.GetName(columnIndex), columnIndex, usedColumnNames);
             var columnType = reader.GetFieldType(columnIndex);
-
-            resultTable.Columns.Add(new DataColumn(columnName, columnType));
+            columns[columnIndex] = new DaxResultColumn(
+                columnIndex,
+                reader.GetName(columnIndex),
+                reader.GetDataTypeName(columnIndex),
+                columnType.Name,
+                columnType.FullName);
         }
+
+        var rows = new List<IReadOnlyList<object?>>();
 
         while (reader.Read())
         {
-            var values = new object[reader.FieldCount];
-            reader.GetValues(values);
+            var rawValues = new object[reader.FieldCount];
+            var values = new object?[reader.FieldCount];
+            reader.GetValues(rawValues);
 
             for (var columnIndex = 0; columnIndex < values.Length; columnIndex++)
             {
-                if (values[columnIndex] is null)
-                {
-                    values[columnIndex] = DBNull.Value;
-                }
+                values[columnIndex] = NormalizeValue(rawValues[columnIndex]);
             }
 
-            resultTable.Rows.Add(values);
+            rows.Add(values);
         }
 
-        return resultTable;
+        return (columns, rows);
     }
 
-    private static string BuildUniqueColumnName(string? rawColumnName, int columnIndex, ISet<string> usedColumnNames)
+    private static object? NormalizeValue(object? value)
     {
-        var baseName = string.IsNullOrWhiteSpace(rawColumnName)
-            ? $"Column{columnIndex + 1}"
-            : rawColumnName;
-
-        var candidate = baseName;
-        var suffix = 2;
-
-        while (!usedColumnNames.Add(candidate))
+        return value switch
         {
-            candidate = $"{baseName}_{suffix}";
-            suffix++;
-        }
-
-        return candidate;
+            null => null,
+            DBNull => null,
+            string stringValue => stringValue,
+            bool boolValue => boolValue,
+            byte byteValue => byteValue,
+            sbyte sbyteValue => sbyteValue,
+            short shortValue => shortValue,
+            ushort ushortValue => ushortValue,
+            int intValue => intValue,
+            uint uintValue => uintValue,
+            long longValue => longValue,
+            ulong ulongValue => ulongValue,
+            float floatValue => floatValue,
+            double doubleValue => doubleValue,
+            decimal decimalValue => decimalValue,
+            Guid guidValue => guidValue,
+            DateTime dateTimeValue => dateTimeValue,
+            DateTimeOffset dateTimeOffsetValue => dateTimeOffsetValue,
+            DateOnly dateOnlyValue => dateOnlyValue,
+            TimeOnly timeOnlyValue => timeOnlyValue,
+            TimeSpan timeSpanValue => timeSpanValue,
+            byte[] bytes => bytes,
+            IFormattable formattable => formattable.ToString(null, CultureInfo.InvariantCulture),
+            _ => value.ToString()
+        };
     }
 }

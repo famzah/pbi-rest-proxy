@@ -1,10 +1,9 @@
-using System.Data;
-
 namespace PbiRestProxy.Dax;
 
 public sealed record DaxQueryResult(
-    DataTable Table,
+    IReadOnlyList<DaxResultColumn> Columns,
+    IReadOnlyList<IReadOnlyList<object?>> Rows,
     TimeSpan Elapsed)
 {
-    public int RowCount => Table.Rows.Count;
+    public int RowCount => Rows.Count;
 }

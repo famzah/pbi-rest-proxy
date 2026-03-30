@@ -1,7 +1,4 @@
-using System.Data;
 using System.Diagnostics;
-using System.Text.Encodings.Web;
-using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -68,9 +65,7 @@ public sealed class LocalRestApiHost : IAsyncDisposable
             builder.WebHost.UseUrls(DefaultBaseUrl);
             builder.Services.ConfigureHttpJsonOptions(options =>
             {
-                options.SerializerOptions.WriteIndented = true;
-                options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
-                options.SerializerOptions.Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping;
+                AppJson.Configure(options.SerializerOptions, writeIndented: true);
             });
 
             var app = builder.Build();
@@ -211,33 +206,7 @@ public sealed class LocalRestApiHost : IAsyncDisposable
                     queryContext.SemanticModelName,
                     request.Query)).ConfigureAwait(false);
 
-            return Results.Ok(CreateExecuteDaxResponse(queryContext!, result));
+            return Results.Ok(DaxResultPayload.Create(queryContext!, result));
         });
-    }
-
-    private static ExecuteDaxResponse CreateExecuteDaxResponse(ConnectedQueryContext queryContext, DaxQueryResult result)
-    {
-        var columns = result.Table.Columns
-            .Cast<DataColumn>()
-            .Select(column => column.ColumnName)
-            .ToArray();
-
-        var rows = result.Table.Rows
-            .Cast<DataRow>()
-            .Select(row => row.ItemArray.Select(NormalizeValue).ToArray() as IReadOnlyList<object?>)
-            .ToArray();
-
-        return new ExecuteDaxResponse(
-            queryContext.SemanticModelName,
-            queryContext.WorkspaceName,
-            result.Elapsed.TotalMilliseconds,
-            result.RowCount,
-            columns,
-            rows);
-    }
-
-    private static object? NormalizeValue(object? value)
-    {
-        return value is DBNull ? null : value;
     }
 }

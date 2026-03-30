@@ -18,7 +18,7 @@ Current implemented milestone:
 - Power BI workspace and semantic model discovery from the `Data Source` tab
 - selected-model connect/disconnect flow with computed XMLA workspace endpoint
 - localhost-only REST server with `GET /health`, `GET /info`, and `POST /execute-dax`
-- DAX execution against the connected semantic model over XMLA
+- DAX execution against the connected semantic model over XMLA, with compact JSON rows plus column metadata
 
 Skipped for now:
 
@@ -115,7 +115,7 @@ az login --tenant <tenant-id-or-domain> --allow-no-subscriptions
 8. Select a semantic model and click `Connect`.
 9. Confirm that `Current Selection` shows the connected target, XMLA endpoint, and local REST server URL.
 10. Open the `DAX` tab and run `EVALUATE ROW("Status", "Ready")`.
-11. Confirm that a result grid is shown.
+11. Confirm that a pretty-printed JSON result is shown.
 12. Call the local REST server:
 
 ```powershell
@@ -140,5 +140,12 @@ curl --% http://127.0.0.1:51087/execute-dax -H "Content-Type: application/json" 
 The `--%` is important when you run `curl` from PowerShell, otherwise PowerShell rewrites the argument quoting before `curl` receives it.
 
 13. Check the `Log` tab for auth, discovery, connection, REST, and DAX events.
+
+`POST /execute-dax` returns:
+
+- compact row arrays in `rows`
+- explicit column metadata in `columns`
+- exact column names as returned by ADOMD, including empty or duplicate captions
+- target metadata such as `workspace`, `semanticModel`, and `xmlaEndpoint`
 
 The working plan lives in [TODO.md](TODO.md).

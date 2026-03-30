@@ -169,6 +169,7 @@ Implemented:
 - Phase 5 connected target selection with computed XMLA endpoint
 - Phase 7 DAX execution against the connected semantic model
 - Phase 8 localhost-only REST API with `/health`, `/info`, and `/execute-dax`
+- DAX output now uses compact row arrays plus explicit column metadata instead of `DataTable`-style shaping
 
 Skipped:
 
@@ -226,7 +227,7 @@ Purpose:
 Contents:
 - multiline DAX editor
 - `Execute` button
-- result grid
+- pretty-printed JSON result using the same shape as `/execute-dax`
 - execution summary:
   - row count
   - elapsed time
@@ -260,6 +261,7 @@ Change:
 
 Current status:
 - Implemented in-process and bound to `127.0.0.1`
+- `/execute-dax` returns compact row arrays and explicit column metadata without `DataTable` normalization
 
 #### Semantic model discovery
 

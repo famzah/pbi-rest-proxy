@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Text.Json;
 using System.Windows.Forms;
 using PbiRestProxy.Auth;
 using PbiRestProxy.Dax;
@@ -48,7 +49,7 @@ public sealed class MainForm : Form
     private ListView workspaceListView = null!;
     private ListView semanticModelListView = null!;
     private ListView logListView = null!;
-    private DataGridView daxResultGrid = null!;
+    private TextBox daxJsonOutputTextBox = null!;
     private ToolStripStatusLabel sessionStatusLabel = null!;
     private string? sessionStatusOverrideText;
     private string daxSummaryText = "Result: not executed";
@@ -463,7 +464,7 @@ public sealed class MainForm : Form
         var infoLabel = new Label
         {
             AutoSize = true,
-            Text = "Run ad-hoc DAX against the currently connected semantic model. Query execution uses the current access token and XMLA target."
+            Text = "Run ad-hoc DAX against the currently connected semantic model. The JSON output mirrors the REST response shape and keeps rows compact with column metadata."
         };
 
         daxQueryTextBox = new TextBox
@@ -515,22 +516,23 @@ public sealed class MainForm : Form
         summaryPanel.Controls.Add(daxAvailabilityValueLabel);
         summaryPanel.Controls.Add(daxSummaryValueLabel);
 
-        daxResultGrid = new DataGridView
+        daxJsonOutputTextBox = new TextBox
         {
             Dock = DockStyle.Fill,
             ReadOnly = true,
-            AllowUserToAddRows = false,
-            AllowUserToDeleteRows = false,
-            AllowUserToResizeRows = false,
-            AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-            RowHeadersVisible = false
+            Multiline = true,
+            AcceptsReturn = true,
+            AcceptsTab = true,
+            ScrollBars = ScrollBars.Both,
+            WordWrap = false,
+            Font = new Font(FontFamily.GenericMonospace, 9f)
         };
 
         page.Controls.Add(root);
         root.Controls.Add(infoLabel, 0, 0);
         root.Controls.Add(daxQueryTextBox, 0, 1);
         root.Controls.Add(summaryPanel, 0, 2);
-        root.Controls.Add(daxResultGrid, 0, 3);
+        root.Controls.Add(daxJsonOutputTextBox, 0, 3);
 
         return page;
     }
@@ -842,19 +844,10 @@ public sealed class MainForm : Form
             return;
         }
 
-        if (!sessionService.State.HasUsableAccessToken || sessionService.CurrentAccessToken is null || sessionService.State.AccessToken is null)
+        if (!sessionService.TryGetConnectedQueryContext(out var queryContext, out var failureMessage))
         {
-            const string message = "Load a non-expired access token before executing DAX.";
-            logStore.WriteWarning("DAX", message);
-            MessageBox.Show(this, message, "No access token", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-            return;
-        }
-
-        if (!sessionService.State.HasConnectedTarget || sessionService.State.XmlaEndpoint is null || sessionService.State.ConnectedSemanticModelName is null)
-        {
-            const string message = "Connect to a semantic model before executing DAX.";
-            logStore.WriteWarning("DAX", message);
-            MessageBox.Show(this, message, "No connected semantic model", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            logStore.WriteWarning("DAX", failureMessage!);
+            MessageBox.Show(this, failureMessage!, "DAX prerequisites missing", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             return;
         }
 
@@ -865,21 +858,18 @@ public sealed class MainForm : Form
             UseWaitCursor = true;
             RefreshSessionState();
 
-            var currentAccessToken = sessionService.CurrentAccessToken;
-            var parsedAccessToken = sessionService.State.AccessToken;
-            var xmlaEndpoint = sessionService.State.XmlaEndpoint;
-            var connectedSemanticModelName = sessionService.State.ConnectedSemanticModelName;
             var queryText = daxQueryTextBox.Text;
 
             var result = await Task.Run(
                 () => daxQueryService.Execute(
-                    currentAccessToken!,
-                    parsedAccessToken!,
-                    xmlaEndpoint!,
-                    connectedSemanticModelName!,
+                    queryContext!.AccessToken,
+                    queryContext.ParsedAccessToken,
+                    queryContext.XmlaEndpoint,
+                    queryContext.SemanticModelName,
                     queryText));
 
-            daxResultGrid.DataSource = result.Table;
+            var payload = DaxResultPayload.Create(queryContext!, result);
+            daxJsonOutputTextBox.Text = JsonSerializer.Serialize(payload, AppJson.CreateSerializerOptions(writeIndented: true));
             daxSummaryText = $"Result: {result.RowCount} row(s) in {result.Elapsed.TotalMilliseconds:N0} ms";
         }
         catch (Exception ex)
@@ -1099,8 +1089,7 @@ public sealed class MainForm : Form
 
     private void ResetDaxResults()
     {
-        daxResultGrid.DataSource = null;
-        daxResultGrid.Columns.Clear();
+        daxJsonOutputTextBox.Text = string.Empty;
         daxSummaryText = "Result: not executed";
         daxSummaryValueLabel.Text = daxSummaryText;
     }
