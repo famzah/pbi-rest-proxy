@@ -1,5 +1,6 @@
 using System.Data;
 using System.Diagnostics;
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -69,6 +70,7 @@ public sealed class LocalRestApiHost : IAsyncDisposable
             {
                 options.SerializerOptions.WriteIndented = true;
                 options.SerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+                options.SerializerOptions.Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping;
             });
 
             var app = builder.Build();
@@ -131,7 +133,7 @@ public sealed class LocalRestApiHost : IAsyncDisposable
             catch (Exception ex)
             {
                 context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-                context.Response.ContentType = "application/json";
+                context.Response.ContentType = "application/json; charset=utf-8";
                 await context.Response.WriteAsJsonAsync(new { error = ex.Message }).ConfigureAwait(false);
                 logStore.WriteError("REST", $"Unhandled error for {context.Request.Method} {context.Request.Path}. {ex.Message}");
             }
