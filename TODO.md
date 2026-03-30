@@ -391,13 +391,13 @@ Notes:
 
 Current status:
 - partially implemented via DAX timeout and row limit guardrails
+- request cancellation is intentionally skipped for now; long-running queries rely on the configured timeout
 
 ## Later follow-ups
 
 - Rewrite `README.md` once the standalone app structure and usage flow are implemented
 - Add a proper build script for the standalone app
 - Add configurable ADOMD command timeout
-- Add better cancellation handling for long-running queries
 - Add CSV export endpoint for table-shaped results
 - Add request metrics and optional per-request query logging
 - Consider replacing shell-out Azure CLI auth with Azure.Identity or MSAL later

@@ -20,6 +20,7 @@ Current implemented milestone:
 - localhost-only REST server with `GET /health`, `GET /info`, and `POST /execute-dax`
 - DAX execution against the connected semantic model over XMLA, with compact JSON rows plus column metadata
 - default DAX safeguards: `30` second command timeout and `1000` row limit
+- the `DAX` tab shows the active timeout and row limit as read-only status
 
 Skipped for now:
 
@@ -154,6 +155,7 @@ Current DAX execution defaults:
 
 - command timeout: `30` seconds
 - row limit: `1000`
+- the `DAX` tab shows these active limits directly in the UI
 
 Behavior when a limit is hit:
 

@@ -35,6 +35,7 @@ public sealed class MainForm : Form
     private Label restEndpointValueLabel = null!;
     private Label daxTargetValueLabel = null!;
     private Label daxAvailabilityValueLabel = null!;
+    private Label daxLimitsValueLabel = null!;
     private Label daxSummaryValueLabel = null!;
     private TextBox tokenInputTextBox = null!;
     private TextBox daxQueryTextBox = null!;
@@ -505,6 +506,12 @@ public sealed class MainForm : Form
             Margin = new Padding(12, 8, 0, 0)
         };
 
+        daxLimitsValueLabel = new Label
+        {
+            AutoSize = true,
+            Margin = new Padding(12, 8, 0, 0)
+        };
+
         daxSummaryValueLabel = new Label
         {
             AutoSize = true,
@@ -514,6 +521,7 @@ public sealed class MainForm : Form
         summaryPanel.Controls.Add(executeDaxButton);
         summaryPanel.Controls.Add(daxTargetValueLabel);
         summaryPanel.Controls.Add(daxAvailabilityValueLabel);
+        summaryPanel.Controls.Add(daxLimitsValueLabel);
         summaryPanel.Controls.Add(daxSummaryValueLabel);
 
         daxJsonOutputTextBox = new TextBox
@@ -779,6 +787,8 @@ public sealed class MainForm : Form
             { } when isExecutingDaxQuery => "Executing DAX query...",
             _ => "Ready to execute DAX"
         };
+        daxLimitsValueLabel.Text =
+            $"Limits: {daxQueryService.Options.CommandTimeoutSeconds} s timeout / {daxQueryService.Options.RowLimit} rows";
         daxSummaryValueLabel.Text = daxSummaryText;
 
         sessionStatusLabel.Text = sessionStatusOverrideText ?? BuildSessionStatusText(state);
