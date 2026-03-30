@@ -1,6 +1,7 @@
 using System.Drawing;
 using System.Windows.Forms;
 using PbiRestProxy.Auth;
+using PbiRestProxy.Dax;
 using PbiRestProxy.Discovery;
 using PbiRestProxy.Logging;
 using PbiRestProxy.Session;
@@ -13,6 +14,7 @@ public sealed class MainForm : Form
     private readonly LogStore logStore;
     private readonly AzureCliAccessTokenProvider azureCliAccessTokenProvider;
     private readonly PowerBiDiscoveryService discoveryService;
+    private readonly AdomdDaxQueryService daxQueryService;
 
     private Label tokenSourceValueLabel = null!;
     private Label tokenStateValueLabel = null!;
@@ -28,7 +30,9 @@ public sealed class MainForm : Form
     private Label xmlaEndpointValueLabel = null!;
     private Label daxTargetValueLabel = null!;
     private Label daxAvailabilityValueLabel = null!;
+    private Label daxSummaryValueLabel = null!;
     private TextBox tokenInputTextBox = null!;
+    private TextBox daxQueryTextBox = null!;
     private Button azureCliTokenButton = null!;
     private Button applyTokenButton = null!;
     private Button clearTokenButton = null!;
@@ -36,20 +40,25 @@ public sealed class MainForm : Form
     private Button loadSemanticModelsButton = null!;
     private Button connectButton = null!;
     private Button disconnectButton = null!;
+    private Button executeDaxButton = null!;
     private ListView workspaceListView = null!;
     private ListView semanticModelListView = null!;
     private ListView logListView = null!;
+    private DataGridView daxResultGrid = null!;
     private ToolStripStatusLabel sessionStatusLabel = null!;
     private string? sessionStatusOverrideText;
+    private string daxSummaryText = "Result: not executed";
     private bool isAcquiringAzureCliToken;
     private bool isLoadingWorkspaces;
     private bool isLoadingSemanticModels;
+    private bool isExecutingDaxQuery;
 
-    public MainForm(AppSessionService sessionService, LogStore logStore, PowerBiDiscoveryService discoveryService)
+    public MainForm(AppSessionService sessionService, LogStore logStore, PowerBiDiscoveryService discoveryService, AdomdDaxQueryService daxQueryService)
     {
         this.sessionService = sessionService;
         this.logStore = logStore;
         this.discoveryService = discoveryService;
+        this.daxQueryService = daxQueryService;
         azureCliAccessTokenProvider = new AzureCliAccessTokenProvider(logStore);
 
         InitializeComponent();
@@ -97,7 +106,7 @@ public sealed class MainForm : Form
         };
 
         statusStrip.Items.Add(sessionStatusLabel);
-        statusStrip.Items.Add(new ToolStripStatusLabel("Current milestone: UI + session + token loading + Power BI discovery"));
+        statusStrip.Items.Add(new ToolStripStatusLabel("Current milestone: token loading + discovery + connect + DAX execution"));
 
         Controls.Add(tabControl);
         Controls.Add(statusStrip);
@@ -441,10 +450,10 @@ public sealed class MainForm : Form
         var infoLabel = new Label
         {
             AutoSize = true,
-            Text = "The DAX tab is wired into the app shell now, but query execution is intentionally deferred until model discovery and XMLA connection are in place."
+            Text = "Run ad-hoc DAX against the currently connected semantic model. Query execution uses the current access token and XMLA target."
         };
 
-        var queryTextBox = new TextBox
+        daxQueryTextBox = new TextBox
         {
             Dock = DockStyle.Fill,
             Multiline = true,
@@ -452,7 +461,7 @@ public sealed class MainForm : Form
             AcceptsTab = true,
             ScrollBars = ScrollBars.Both,
             WordWrap = false,
-            Text = "EVALUATE ROW(\"Message\", \"DAX execution is not implemented yet\")"
+            Text = "EVALUATE ROW(\"Status\", \"Ready\")"
         };
 
         var summaryPanel = new FlowLayoutPanel
@@ -463,12 +472,12 @@ public sealed class MainForm : Form
             WrapContents = false
         };
 
-        var executeButton = new Button
+        executeDaxButton = new Button
         {
             AutoSize = true,
-            Enabled = false,
             Text = "Execute DAX"
         };
+        executeDaxButton.Click += async (_, _) => await ExecuteDaxQueryAsync();
 
         daxTargetValueLabel = new Label
         {
@@ -482,11 +491,18 @@ public sealed class MainForm : Form
             Margin = new Padding(12, 8, 0, 0)
         };
 
-        summaryPanel.Controls.Add(executeButton);
+        daxSummaryValueLabel = new Label
+        {
+            AutoSize = true,
+            Margin = new Padding(12, 8, 0, 0)
+        };
+
+        summaryPanel.Controls.Add(executeDaxButton);
         summaryPanel.Controls.Add(daxTargetValueLabel);
         summaryPanel.Controls.Add(daxAvailabilityValueLabel);
+        summaryPanel.Controls.Add(daxSummaryValueLabel);
 
-        var resultGrid = new DataGridView
+        daxResultGrid = new DataGridView
         {
             Dock = DockStyle.Fill,
             ReadOnly = true,
@@ -499,9 +515,9 @@ public sealed class MainForm : Form
 
         page.Controls.Add(root);
         root.Controls.Add(infoLabel, 0, 0);
-        root.Controls.Add(queryTextBox, 0, 1);
+        root.Controls.Add(daxQueryTextBox, 0, 1);
         root.Controls.Add(summaryPanel, 0, 2);
-        root.Controls.Add(resultGrid, 0, 3);
+        root.Controls.Add(daxResultGrid, 0, 3);
 
         return page;
     }
@@ -627,6 +643,7 @@ public sealed class MainForm : Form
         logStore.EntryAdded += HandleLogEntryAdded;
         logStore.Cleared += HandleLogCleared;
         tokenInputTextBox.TextChanged += (_, _) => UpdateActionButtons();
+        daxQueryTextBox.TextChanged += (_, _) => UpdateActionButtons();
         workspaceListView.SelectedIndexChanged += (_, _) => HandleWorkspaceSelectionChanged();
         semanticModelListView.SelectedIndexChanged += (_, _) => HandleSemanticModelSelectionChanged();
     }
@@ -637,6 +654,7 @@ public sealed class MainForm : Form
         {
             sessionService.SetAccessToken(tokenInputTextBox.Text, AccessTokenSource.Manual);
             ResetDiscoveryLists();
+            ResetDaxResults();
             tokenInputTextBox.Clear();
         }
         catch (InvalidAccessTokenException ex)
@@ -663,6 +681,7 @@ public sealed class MainForm : Form
             var accessToken = await azureCliAccessTokenProvider.AcquireAccessTokenAsync();
             sessionService.SetAccessToken(accessToken, AccessTokenSource.AzureCli);
             ResetDiscoveryLists();
+            ResetDaxResults();
             tokenInputTextBox.Clear();
         }
         catch (Exception ex)
@@ -684,6 +703,7 @@ public sealed class MainForm : Form
         tokenInputTextBox.Clear();
         sessionService.ClearAccessToken();
         ResetDiscoveryLists();
+        ResetDaxResults();
     }
 
     private void LoadExistingLogEntries()
@@ -732,22 +752,19 @@ public sealed class MainForm : Form
         {
             { HasUsableAccessToken: false } => "Load a valid token first",
             { HasConnectedTarget: false } => "Connect to a semantic model first",
-            _ => "DAX execution will be enabled after XMLA connectivity is added"
+            { } when isExecutingDaxQuery => "Executing DAX query...",
+            _ => "Ready to execute DAX"
         };
+        daxSummaryValueLabel.Text = daxSummaryText;
 
-        sessionStatusLabel.Text = sessionStatusOverrideText ?? state.AccessToken switch
-        {
-            null => "No access token loaded",
-            { IsExpired: true } token => $"Loaded expired token for {token.DisplayUser}",
-            var token => $"Loaded token for {token!.DisplayUser}"
-        };
+        sessionStatusLabel.Text = sessionStatusOverrideText ?? BuildSessionStatusText(state);
 
         UpdateActionButtons();
     }
 
     private void UpdateActionButtons()
     {
-        var isBusy = isAcquiringAzureCliToken || isLoadingWorkspaces || isLoadingSemanticModels;
+        var isBusy = isAcquiringAzureCliToken || isLoadingWorkspaces || isLoadingSemanticModels || isExecutingDaxQuery;
         var selectedTargetAlreadyConnected =
             sessionService.State.SelectedWorkspace is not null &&
             sessionService.State.SelectedSemanticModel is not null &&
@@ -769,6 +786,11 @@ public sealed class MainForm : Form
             sessionService.State.SelectedSemanticModel is not null &&
             !selectedTargetAlreadyConnected;
         disconnectButton.Enabled = !isBusy && sessionService.State.HasConnectedTarget;
+        executeDaxButton.Enabled =
+            !isBusy &&
+            sessionService.State.HasUsableAccessToken &&
+            sessionService.State.HasConnectedTarget &&
+            !string.IsNullOrWhiteSpace(daxQueryTextBox.Text);
     }
 
     private void ConnectSelection()
@@ -776,6 +798,7 @@ public sealed class MainForm : Form
         try
         {
             sessionService.ConnectSelection();
+            ResetDaxResults();
         }
         catch (Exception ex)
         {
@@ -787,6 +810,68 @@ public sealed class MainForm : Form
     private void DisconnectSelection()
     {
         sessionService.Disconnect();
+        ResetDaxResults();
+    }
+
+    private async Task ExecuteDaxQueryAsync()
+    {
+        if (isExecutingDaxQuery)
+        {
+            return;
+        }
+
+        if (!sessionService.State.HasUsableAccessToken || sessionService.CurrentAccessToken is null || sessionService.State.AccessToken is null)
+        {
+            const string message = "Load a non-expired access token before executing DAX.";
+            logStore.WriteWarning("DAX", message);
+            MessageBox.Show(this, message, "No access token", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        if (!sessionService.State.HasConnectedTarget || sessionService.State.XmlaEndpoint is null || sessionService.State.ConnectedSemanticModelName is null)
+        {
+            const string message = "Connect to a semantic model before executing DAX.";
+            logStore.WriteWarning("DAX", message);
+            MessageBox.Show(this, message, "No connected semantic model", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+            return;
+        }
+
+        try
+        {
+            isExecutingDaxQuery = true;
+            sessionStatusOverrideText = "Executing DAX query...";
+            UseWaitCursor = true;
+            RefreshSessionState();
+
+            var currentAccessToken = sessionService.CurrentAccessToken;
+            var parsedAccessToken = sessionService.State.AccessToken;
+            var xmlaEndpoint = sessionService.State.XmlaEndpoint;
+            var connectedSemanticModelName = sessionService.State.ConnectedSemanticModelName;
+            var queryText = daxQueryTextBox.Text;
+
+            var result = await Task.Run(
+                () => daxQueryService.Execute(
+                    currentAccessToken!,
+                    parsedAccessToken!,
+                    xmlaEndpoint!,
+                    connectedSemanticModelName!,
+                    queryText));
+
+            daxResultGrid.DataSource = result.Table;
+            daxSummaryText = $"Result: {result.RowCount} row(s) in {result.Elapsed.TotalMilliseconds:N0} ms";
+        }
+        catch (Exception ex)
+        {
+            daxSummaryText = "Result: failed";
+            MessageBox.Show(this, ex.Message, "DAX execution failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+        finally
+        {
+            isExecutingDaxQuery = false;
+            sessionStatusOverrideText = null;
+            UseWaitCursor = false;
+            RefreshSessionState();
+        }
     }
 
     private async Task LoadWorkspacesAsync()
@@ -895,6 +980,7 @@ public sealed class MainForm : Form
         var previousWorkspaceId = sessionService.State.SelectedWorkspace?.Id;
 
         sessionService.SetSelectedWorkspace(selectedWorkspace);
+        ResetDaxResults();
 
         if (selectedWorkspace is null || !string.Equals(previousWorkspaceId, selectedWorkspace.Id, StringComparison.Ordinal))
         {
@@ -906,6 +992,7 @@ public sealed class MainForm : Form
     {
         var selectedSemanticModel = GetSelectedSemanticModel();
         sessionService.SetSelectedSemanticModel(selectedSemanticModel);
+        ResetDaxResults();
     }
 
     private WorkspaceSummary? GetSelectedWorkspace()
@@ -986,6 +1073,24 @@ public sealed class MainForm : Form
     {
         PopulateWorkspaces([]);
         sessionService.ClearSelection();
+    }
+
+    private void ResetDaxResults()
+    {
+        daxResultGrid.DataSource = null;
+        daxResultGrid.Columns.Clear();
+        daxSummaryText = "Result: not executed";
+        daxSummaryValueLabel.Text = daxSummaryText;
+    }
+
+    private static string BuildSessionStatusText(AppSessionState? state)
+    {
+        return state?.AccessToken switch
+        {
+            null => "No access token loaded",
+            { IsExpired: true } token => $"Loaded expired token for {token.DisplayUser}",
+            { } token => $"Loaded token for {token.DisplayUser}"
+        };
     }
 
     private static void RestoreListSelection(ListView listView, string? selectedItemId)

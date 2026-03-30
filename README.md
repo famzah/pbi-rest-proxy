@@ -17,11 +17,11 @@ Current implemented milestone:
 - Azure CLI-assisted or manual access-token loading with local JWT claim parsing
 - Power BI workspace and semantic model discovery from the `Data Source` tab
 - selected-model connect/disconnect flow with computed XMLA workspace endpoint
+- DAX execution against the connected semantic model over XMLA
 
 Not implemented yet:
 
-- XMLA connectivity
-- DAX execution
+- metadata exploration over XMLA
 - local REST API
 
 ## Prerequisites
@@ -114,6 +114,8 @@ az login --tenant <tenant-id-or-domain> --allow-no-subscriptions
 7. Select a workspace and click `Load Models`.
 8. Select a semantic model and click `Connect`.
 9. Confirm that `Current Selection` shows the connected target and XMLA endpoint.
-10. Check the `Log` tab for auth, discovery, and connection events.
+10. Open the `DAX` tab and run `EVALUATE ROW("Status", "Ready")`.
+11. Confirm that a result grid is shown.
+12. Check the `Log` tab for auth, discovery, connection, and DAX events.
 
 The working plan lives in [TODO.md](TODO.md).

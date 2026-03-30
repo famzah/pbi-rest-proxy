@@ -167,6 +167,7 @@ Implemented:
 - Phase 3 Azure CLI-assisted and manual token loading
 - Phase 4 Power BI workspace and semantic model discovery
 - Phase 5 connected target selection with computed XMLA endpoint
+- Phase 7 DAX execution against the connected semantic model
 
 ## MVP scope
 
