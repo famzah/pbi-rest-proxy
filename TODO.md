@@ -393,6 +393,12 @@ Current status:
 - partially implemented via DAX timeout and row limit guardrails
 - request cancellation is intentionally skipped for now; long-running queries rely on the configured timeout
 
+Duplicate semantic model name note:
+- Power BI / Fabric discovery identifies semantic models by ID, but the XMLA connection path typically targets the semantic model by catalog/database name.
+- If a single workspace contains two semantic models with the same display name, discovery can still list them as separate items, but the later XMLA connection step becomes ambiguous if the app only carries the name forward.
+- That creates a correctness risk where the UI selection and the actual XMLA target can diverge.
+- For V1, prefer correctness over partial support: detect duplicate semantic model names within a workspace, show a clear unsupported error, disable connect for those entries, and log the conflicting names and IDs.
+
 ## Later follow-ups
 
 - Rewrite `README.md` once the standalone app structure and usage flow are implemented
@@ -401,17 +407,30 @@ Current status:
 - Add configurable REST port
 - Add configurable ADOMD command timeout
 - Add configurable default DAX row limit
+- Expose build/version info in the UI and `/info`
+- Include stamped version, commit, and build time so bug reports can identify the exact binary
+- Add bounded in-memory log retention
+- Cap the in-memory log size and show when older entries were dropped
 - Improve UI status/error presentation
 - Make REST startup failures clearer in the UI
 - Make other status failures clearer in the UI, including connected/discovery/token errors
 - Add visual status indicators in the UI instead of relying only on text
 - Use status colors consistently, for example: green for healthy/connected, red for errors, gray for neutral/not connected
 - Consider lightweight per-tab status indicators, such as colored dots for `Connection` and `Data Source`, so problems are visible without opening each tab
+- Improve the clunky `Data Source` workflow
+- Load workspaces automatically when a usable token becomes available
+- Allow double-click on a workspace to load its semantic models
+- Allow double-click on a semantic model to connect immediately
+- Add a blocking progress overlay or equivalent busy indicator for long-running operations
+- Show what is currently in progress, for example loading workspaces, loading models, connecting, or executing DAX
 - Document the exact REST response schema in `README.md` for GitHub publication
 - Document the exact `/execute-dax` response schema with a full sample payload
 - Keep the existing `POST /execute-dax` `curl` and PowerShell examples in the published README
+- Add a machine-readable API contract for `/execute-dax`
+- Prefer JSON Schema or OpenAPI so the response shape does not drift from the implementation
 - Add CSV export endpoint for table-shaped results
 - Add request metrics and optional per-request query logging
+- V1: fail fast on duplicate semantic model names in a workspace
 - Evaluate DAX-based model metadata queries for read-only scenarios
 - `INFO.VIEW.TABLES()`
 - `INFO.VIEW.COLUMNS()`
