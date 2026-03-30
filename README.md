@@ -16,6 +16,7 @@ Current implemented milestone:
 - in-memory session and status infrastructure
 - Azure CLI-assisted or manual access-token loading with local JWT claim parsing
 - Power BI workspace and semantic model discovery from the `Data Source` tab
+- selected-model connect/disconnect flow with computed XMLA workspace endpoint
 
 Not implemented yet:
 
@@ -111,6 +112,8 @@ az login --tenant <tenant-id-or-domain> --allow-no-subscriptions
 5. Confirm that the app shows the parsed user, tenant, audience, and expiration details.
 6. Open the `Data Source` tab and click `Load Workspaces`.
 7. Select a workspace and click `Load Models`.
-8. Check the `Log` tab for auth and discovery events.
+8. Select a semantic model and click `Connect`.
+9. Confirm that `Current Selection` shows the connected target and XMLA endpoint.
+10. Check the `Log` tab for auth, discovery, and connection events.
 
 The working plan lives in [TODO.md](TODO.md).

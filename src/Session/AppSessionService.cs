@@ -1,3 +1,4 @@
+using PbiRestProxy.Connection;
 using PbiRestProxy.Discovery;
 using PbiRestProxy.Logging;
 
@@ -31,6 +32,8 @@ public sealed class AppSessionService
             AccessToken = parsedToken,
             SelectedWorkspace = null,
             SelectedSemanticModel = null,
+            ConnectedWorkspace = null,
+            ConnectedSemanticModel = null,
             XmlaEndpoint = null
         };
 
@@ -60,6 +63,8 @@ public sealed class AppSessionService
             AccessToken = null,
             SelectedWorkspace = null,
             SelectedSemanticModel = null,
+            ConnectedWorkspace = null,
+            ConnectedSemanticModel = null,
             XmlaEndpoint = null
         };
 
@@ -78,6 +83,8 @@ public sealed class AppSessionService
         {
             SelectedWorkspace = workspace,
             SelectedSemanticModel = null,
+            ConnectedWorkspace = null,
+            ConnectedSemanticModel = null,
             XmlaEndpoint = null
         };
 
@@ -108,6 +115,8 @@ public sealed class AppSessionService
         State = State with
         {
             SelectedSemanticModel = semanticModel,
+            ConnectedWorkspace = null,
+            ConnectedSemanticModel = null,
             XmlaEndpoint = null
         };
 
@@ -123,9 +132,37 @@ public sealed class AppSessionService
         StateChanged?.Invoke();
     }
 
+    public void ConnectSelection()
+    {
+        if (State.SelectedWorkspace is null || State.SelectedSemanticModel is null)
+        {
+            throw new InvalidOperationException("Select a workspace and semantic model before connecting.");
+        }
+
+        var selectedWorkspace = State.SelectedWorkspace;
+        var selectedSemanticModel = State.SelectedSemanticModel;
+        var xmlaEndpoint = PowerBiXmlaEndpointFactory.BuildWorkspaceEndpoint(selectedWorkspace);
+
+        State = State with
+        {
+            ConnectedWorkspace = selectedWorkspace,
+            ConnectedSemanticModel = selectedSemanticModel,
+            XmlaEndpoint = xmlaEndpoint
+        };
+
+        logStore.WriteInfo(
+            "Connection",
+            $"Connected target set to workspace '{State.ConnectedWorkspaceName}', semantic model '{State.ConnectedSemanticModelName}', XMLA endpoint '{xmlaEndpoint}'.");
+        StateChanged?.Invoke();
+    }
+
     public void ClearSelection()
     {
-        if (State.SelectedWorkspace is null && State.SelectedSemanticModel is null && State.XmlaEndpoint is null)
+        if (State.SelectedWorkspace is null &&
+            State.SelectedSemanticModel is null &&
+            State.ConnectedWorkspace is null &&
+            State.ConnectedSemanticModel is null &&
+            State.XmlaEndpoint is null)
         {
             return;
         }
@@ -134,10 +171,30 @@ public sealed class AppSessionService
         {
             SelectedWorkspace = null,
             SelectedSemanticModel = null,
+            ConnectedWorkspace = null,
+            ConnectedSemanticModel = null,
             XmlaEndpoint = null
         };
 
-        logStore.WriteInfo("Discovery", "Workspace and semantic model selections cleared.");
+        logStore.WriteInfo("Discovery", "Workspace selection, semantic model selection, and connected target cleared.");
+        StateChanged?.Invoke();
+    }
+
+    public void Disconnect()
+    {
+        if (State.ConnectedWorkspace is null && State.ConnectedSemanticModel is null && State.XmlaEndpoint is null)
+        {
+            return;
+        }
+
+        State = State with
+        {
+            ConnectedWorkspace = null,
+            ConnectedSemanticModel = null,
+            XmlaEndpoint = null
+        };
+
+        logStore.WriteInfo("Connection", "Disconnected the current XMLA target.");
         StateChanged?.Invoke();
     }
 

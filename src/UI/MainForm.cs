@@ -20,8 +20,11 @@ public sealed class MainForm : Form
     private Label userValueLabel = null!;
     private Label tenantValueLabel = null!;
     private Label expiresValueLabel = null!;
-    private Label workspaceValueLabel = null!;
-    private Label semanticModelValueLabel = null!;
+    private Label selectedWorkspaceValueLabel = null!;
+    private Label selectedSemanticModelValueLabel = null!;
+    private Label connectedWorkspaceValueLabel = null!;
+    private Label connectedSemanticModelValueLabel = null!;
+    private Label connectionStateValueLabel = null!;
     private Label xmlaEndpointValueLabel = null!;
     private Label daxTargetValueLabel = null!;
     private Label daxAvailabilityValueLabel = null!;
@@ -31,6 +34,8 @@ public sealed class MainForm : Form
     private Button clearTokenButton = null!;
     private Button loadWorkspacesButton = null!;
     private Button loadSemanticModelsButton = null!;
+    private Button connectButton = null!;
+    private Button disconnectButton = null!;
     private ListView workspaceListView = null!;
     private ListView semanticModelListView = null!;
     private ListView logListView = null!;
@@ -362,13 +367,57 @@ public sealed class MainForm : Form
             AutoSizeMode = AutoSizeMode.GrowAndShrink
         };
 
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 1,
+            RowCount = 2
+        };
+
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
         var table = CreateTwoColumnTable();
 
-        AddStatusRow(table, "Workspace:", out workspaceValueLabel);
-        AddStatusRow(table, "Semantic model:", out semanticModelValueLabel);
+        AddStatusRow(table, "Selected workspace:", out selectedWorkspaceValueLabel);
+        AddStatusRow(table, "Selected semantic model:", out selectedSemanticModelValueLabel);
+        AddStatusRow(table, "Connection state:", out connectionStateValueLabel);
+        AddStatusRow(table, "Connected workspace:", out connectedWorkspaceValueLabel);
+        AddStatusRow(table, "Connected semantic model:", out connectedSemanticModelValueLabel);
         AddStatusRow(table, "XMLA endpoint:", out xmlaEndpointValueLabel);
 
-        groupBox.Controls.Add(table);
+        connectButton = new Button
+        {
+            AutoSize = true,
+            Text = "Connect"
+        };
+        connectButton.Click += (_, _) => ConnectSelection();
+
+        disconnectButton = new Button
+        {
+            AutoSize = true,
+            Text = "Disconnect"
+        };
+        disconnectButton.Click += (_, _) => DisconnectSelection();
+
+        var buttonPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            Padding = new Padding(12, 0, 12, 12),
+            WrapContents = false
+        };
+
+        buttonPanel.Controls.Add(connectButton);
+        buttonPanel.Controls.Add(disconnectButton);
+
+        layout.Controls.Add(table, 0, 0);
+        layout.Controls.Add(buttonPanel, 0, 1);
+
+        groupBox.Controls.Add(layout);
         return groupBox;
     }
 
@@ -668,17 +717,23 @@ public sealed class MainForm : Form
         tenantValueLabel.Text = state.AccessToken?.TenantId ?? "n/a";
         expiresValueLabel.Text = state.AccessToken?.ExpiresAtLocal.ToString("yyyy-MM-dd HH:mm:ss zzz") ?? "n/a";
 
-        workspaceValueLabel.Text = state.SelectedWorkspaceName ?? "Not selected yet";
-        semanticModelValueLabel.Text = state.SelectedSemanticModelName ?? "Not selected yet";
+        selectedWorkspaceValueLabel.Text = state.SelectedWorkspaceName ?? "Not selected yet";
+        selectedSemanticModelValueLabel.Text = state.SelectedSemanticModelName ?? "Not selected yet";
+        connectionStateValueLabel.Text = state.HasConnectedTarget ? "Connected" : "Not connected";
+        connectedWorkspaceValueLabel.Text = state.ConnectedWorkspaceName ?? "Not connected yet";
+        connectedSemanticModelValueLabel.Text = state.ConnectedSemanticModelName ?? "Not connected yet";
         xmlaEndpointValueLabel.Text = state.XmlaEndpoint ?? "Not connected yet";
 
-        daxTargetValueLabel.Text = state.SelectedSemanticModelName is null
+        daxTargetValueLabel.Text = state.ConnectedSemanticModelName is null
             ? "Target: none"
-            : $"Target: {state.SelectedSemanticModelName}";
+            : $"Target: {state.ConnectedSemanticModelName}";
 
-        daxAvailabilityValueLabel.Text = state.HasUsableAccessToken
-            ? "DAX execution will be enabled after XMLA connectivity is added"
-            : "Load a valid token first";
+        daxAvailabilityValueLabel.Text = state switch
+        {
+            { HasUsableAccessToken: false } => "Load a valid token first",
+            { HasConnectedTarget: false } => "Connect to a semantic model first",
+            _ => "DAX execution will be enabled after XMLA connectivity is added"
+        };
 
         sessionStatusLabel.Text = sessionStatusOverrideText ?? state.AccessToken switch
         {
@@ -693,6 +748,11 @@ public sealed class MainForm : Form
     private void UpdateActionButtons()
     {
         var isBusy = isAcquiringAzureCliToken || isLoadingWorkspaces || isLoadingSemanticModels;
+        var selectedTargetAlreadyConnected =
+            sessionService.State.SelectedWorkspace is not null &&
+            sessionService.State.SelectedSemanticModel is not null &&
+            string.Equals(sessionService.State.SelectedWorkspace.Id, sessionService.State.ConnectedWorkspace?.Id, StringComparison.Ordinal) &&
+            string.Equals(sessionService.State.SelectedSemanticModel.Id, sessionService.State.ConnectedSemanticModel?.Id, StringComparison.Ordinal);
 
         azureCliTokenButton.Enabled = !isBusy;
         applyTokenButton.Enabled = !isBusy && !string.IsNullOrWhiteSpace(tokenInputTextBox.Text);
@@ -702,6 +762,31 @@ public sealed class MainForm : Form
             !isBusy &&
             sessionService.State.HasUsableAccessToken &&
             sessionService.State.SelectedWorkspace is not null;
+        connectButton.Enabled =
+            !isBusy &&
+            sessionService.State.HasUsableAccessToken &&
+            sessionService.State.SelectedWorkspace is not null &&
+            sessionService.State.SelectedSemanticModel is not null &&
+            !selectedTargetAlreadyConnected;
+        disconnectButton.Enabled = !isBusy && sessionService.State.HasConnectedTarget;
+    }
+
+    private void ConnectSelection()
+    {
+        try
+        {
+            sessionService.ConnectSelection();
+        }
+        catch (Exception ex)
+        {
+            logStore.WriteError("Connection", ex.Message);
+            MessageBox.Show(this, ex.Message, "Connect failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void DisconnectSelection()
+    {
+        sessionService.Disconnect();
     }
 
     private async Task LoadWorkspacesAsync()
