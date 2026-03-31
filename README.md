@@ -141,6 +141,25 @@ curl --% http://127.0.0.1:51087/execute-dax -H "Content-Type: application/json" 
 
 The `--%` is important when you run `curl` from PowerShell, otherwise PowerShell rewrites the argument quoting before `curl` receives it.
 
+For machine/debug consumers, do not rely on the response body alone. Some non-`200` responses may not return useful JSON, so you should also observe the HTTP status code. A simple way is to use `curl -i` so the HTTP status line and headers are shown before the body:
+
+```powershell
+curl -i -sS --max-time 40 --% http://127.0.0.1:51087/execute-dax -H "Content-Type: application/json" --raw-data '{"query":"EVALUATE ROW(\"Status\", \"REST\")"}'
+```
+
+Example output:
+
+```text
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+
+{"workspace":"...","semanticModel":"...","columns":[...],"rows":[...]}
+```
+
+- `-i` shows the HTTP status line and headers before the body
+- `-sS` suppresses the progress meter but still shows errors
+- `--max-time 40` avoids waiting forever on a hung request and leaves some margin above the current 30-second DAX timeout
+
 13. Check the `Log` tab for auth, discovery, connection, REST, and DAX events.
 
 `POST /execute-dax` returns:
