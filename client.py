@@ -13,15 +13,17 @@ class HelpFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescript
 
 
 def build_parser() -> argparse.ArgumentParser:
+    program_name = sys.argv[0] or "client.py"
+
     return argparse.ArgumentParser(
         description=(
             "Execute a DAX query against the local pbi-rest-proxy REST API. "
             "The DAX query is read from stdin and the successful JSON result is written to stdout."
         ),
-        epilog="""Sample usage:
-  echo 'EVALUATE ROW("Status", "REST")' | python .\\client.py
-  python .\\client.py < query.dax
-  python .\\client.py --base-url http://127.0.0.1:51087 --timeout 40 < query.dax
+        epilog=f"""Sample usage:
+  echo 'EVALUATE ROW("Status", "REST")' | python {program_name}
+  python {program_name} < query.dax
+  python {program_name} --base-url http://127.0.0.1:51087 --timeout 40 < query.dax
 """,
         formatter_class=HelpFormatter,
     )
