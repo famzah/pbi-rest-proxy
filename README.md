@@ -160,6 +160,24 @@ Content-Type: application/json; charset=utf-8
 - `-sS` suppresses the progress meter but still shows errors
 - `--max-time 40` avoids waiting forever on a hung request and leaves some margin above the current 30-second DAX timeout
 
+Python helper client:
+
+```powershell
+'EVALUATE ROW("Status", "REST")' | python .\client.py
+echo 'EVALUATE ROW("Status", "REST")' | python .\client.py
+python .\client.py < .\query.dax
+python .\client.py --help
+```
+
+`client.py`:
+
+- reads the DAX query from `stdin`
+- posts `{"query": ...}` to `POST /execute-dax`
+- uses `http://127.0.0.1:51087` by default
+- uses a `40` second HTTP timeout by default
+- prints successful JSON directly to `stdout`
+- prints HTTP status and any returned error body to `stderr` on non-`200` responses
+
 13. Check the `Log` tab for auth, discovery, connection, REST, and DAX events.
 
 `POST /execute-dax` returns:
