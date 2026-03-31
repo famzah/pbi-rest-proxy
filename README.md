@@ -1,14 +1,16 @@
 # pbi-rest-proxy
 
-This project is being rebuilt from scratch.
+pbi-rest-proxy is a standalone Windows app that gives AI agents and other local tools a simple way to execute DAX queries against Power BI semantic models through direct XMLA connection.
 
-The new target is a standalone Windows app that:
+The app currently supports:
 
 - authenticates the current user
 - discovers accessible Power BI / Fabric semantic models
 - connects directly to a selected semantic model over XMLA
 - exposes the selected model locally through a REST API
 - includes a small built-in UI for connection management, DAX testing, and logs
+
+Roadmap and follow-up work live in [TODO.md](TODO.md).
 
 Current implemented milestone:
 
@@ -21,10 +23,6 @@ Current implemented milestone:
 - DAX execution against the connected semantic model over XMLA, with compact JSON rows plus column metadata
 - default DAX safeguards: `30` second command timeout and `1000` row limit
 - the `DAX` tab shows the active timeout and row limit as read-only status
-
-Skipped for now:
-
-- metadata exploration over XMLA, because the current target permission model does not allow internal semantic-model metadata discovery
 
 ## Prerequisites
 
@@ -163,7 +161,6 @@ Content-Type: application/json; charset=utf-8
 Python helper client:
 
 ```powershell
-'EVALUATE ROW("Status", "REST")' | python .\client.py
 echo 'EVALUATE ROW("Status", "REST")' | python .\client.py
 python .\client.py < .\query.dax
 python .\client.py --help
@@ -198,5 +195,3 @@ Behavior when a limit is hit:
 
 - row limit: the request still succeeds with `200 OK`, but the payload reports `isTruncated: true`
 - timeout: the REST API returns `504 Gateway Timeout`, and the DAX tab reports a timeout instead of generic failure
-
-The working plan lives in [TODO.md](TODO.md).
