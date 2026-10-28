@@ -81,13 +81,13 @@ public sealed class AdomdDaxQueryService
         catch (Exception ex) when (IsTimeoutException(ex))
         {
             var message = $"The DAX query exceeded the configured timeout of {options.CommandTimeoutSeconds} seconds.";
-            logStore.WriteWarning("DAX", $"Timeout executing DAX query for semantic model '{initialCatalog}' at '{xmlaEndpoint}'. {message}");
+            logStore.WriteWarning("DAX", $"Timeout executing DAX query for semantic model '{initialCatalog}' at '{xmlaEndpoint}'. {message}{Environment.NewLine}{ex}");
             throw new DaxQueryExecutionException(DaxQueryFailureKind.Timeout, message, ex);
         }
         catch (Exception ex)
         {
             var message = $"DAX execution failed for semantic model '{initialCatalog}' at '{xmlaEndpoint}'. {ex.Message}";
-            logStore.WriteError("DAX", message);
+            logStore.WriteError("DAX", $"{message}{Environment.NewLine}{ex}");
             throw new DaxQueryExecutionException(DaxQueryFailureKind.General, message, ex);
         }
     }

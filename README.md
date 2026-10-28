@@ -195,3 +195,11 @@ Behavior when a limit is hit:
 
 - row limit: the request still succeeds with `200 OK`, but the payload reports `isTruncated: true`
 - timeout: the REST API returns `504 Gateway Timeout`, and the DAX tab reports a timeout instead of generic failure
+
+## Troubleshooting DAX failures
+
+If the built-in sample query fails, dismiss the error dialog and copy the full exception from the `DAX` tab's output box. It includes inner exceptions and stack traces, including the underlying cause of an ADOMD `TypeInitializationException`.
+
+Failures from both the UI and REST API are also recorded with full exception details in the `Log` tab. Click `Copy Log` to copy all current log entries, including multiline exception details, before closing the app; logs are kept in memory only. REST error responses retain their short error messages.
+
+Include the app version and build timestamp (available from `GET /info`) with the report. After fixing a type initialization failure or replacing dependencies, restart the app before retrying.

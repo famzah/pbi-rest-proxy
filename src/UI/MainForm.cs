@@ -575,7 +575,15 @@ public sealed class MainForm : Form
         };
         clearLogButton.Click += (_, _) => logStore.Clear();
 
+        var copyLogButton = new Button
+        {
+            AutoSize = true,
+            Text = "Copy Log"
+        };
+        copyLogButton.Click += (_, _) => CopyLogToClipboard();
+
         toolbar.Controls.Add(clearLogButton);
+        toolbar.Controls.Add(copyLogButton);
 
         logListView = new ListView
         {
@@ -886,19 +894,19 @@ public sealed class MainForm : Form
         }
         catch (DaxQueryExecutionException ex) when (ex.FailureKind == DaxQueryFailureKind.Timeout)
         {
-            daxJsonOutputTextBox.Clear();
+            daxJsonOutputTextBox.Text = ex.ToString();
             daxSummaryText = $"Result: timed out after {daxQueryService.Options.CommandTimeoutSeconds} s";
             MessageBox.Show(this, ex.Message, "DAX query timed out", MessageBoxButtons.OK, MessageBoxIcon.Warning);
         }
         catch (DaxQueryExecutionException ex)
         {
-            daxJsonOutputTextBox.Clear();
+            daxJsonOutputTextBox.Text = ex.ToString();
             daxSummaryText = "Result: failed";
             MessageBox.Show(this, ex.Message, "DAX execution failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
         catch (Exception ex)
         {
-            daxJsonOutputTextBox.Clear();
+            daxJsonOutputTextBox.Text = ex.ToString();
             daxSummaryText = "Result: failed";
             MessageBox.Show(this, ex.Message, "DAX execution failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
@@ -1232,6 +1240,26 @@ public sealed class MainForm : Form
     private void ClearLogListView()
     {
         logListView.Items.Clear();
+    }
+
+    private void CopyLogToClipboard()
+    {
+        var entries = logStore.Snapshot();
+        if (entries.Count == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            Clipboard.SetText(string.Join(Environment.NewLine, entries.Select(
+                entry => $"{entry.LocalTimestampText} [{entry.Level}] {entry.Source}: {entry.Message}")));
+        }
+        catch (System.Runtime.InteropServices.ExternalException ex)
+        {
+            MessageBox.Show(this, $"Could not copy the log to the clipboard. Try again.{Environment.NewLine}{ex.Message}",
+                "Copy Log failed", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private static TableLayoutPanel CreateTwoColumnTable()
